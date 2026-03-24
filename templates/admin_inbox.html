@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+
+{% block title %}Admin Inbox{% endblock %}
+
+{% block content %}
+<section class="panel admin-inbox-shell">
+    <div class="dashboard-header">
+        <div>
+            <p class="eyebrow">Admin Inbox</p>
+            <h2>Citizen tickets and complaint follow-ups</h2>
+            <p class="muted">This page is separate so the main dashboard stays fast and compact.</p>
+        </div>
+        <div class="button-row">
+            <span class="summary-chip">Unread on open: {{ unread_admin }}</span>
+            <a class="button button-secondary" href="{{ url_for('admin_dashboard') }}">Back to Dashboard</a>
+        </div>
+    </div>
+
+    {% if missing_departments %}
+        <div class="alert-banner">Departments without active workers: {{ missing_departments|join(', ') }}</div>
+    {% endif %}
+
+    <div class="stack compact-stack admin-inbox-list">
+        {% for ticket in tickets %}
+            <article class="ticket-card admin-ticket-card">
+                <div class="ticket-head">
+                    <div>
+                        <strong>#CMP-{{ "%04d"|format(ticket.complaint_id) }}</strong>
+                        <p>{{ ticket.message }}</p>
+                    </div>
+                    <div class="ticket-meta">
+                        <span class="pill">{{ ticket.department or 'General' }}</span>
+                        <small>{{ ticket.created_at }}</small>
+                    </div>
+                </div>
+
+                {% if ticket.complaint_image_url %}
+                    <div class="proof-block">
+                        <a class="button button-secondary" href="{{ ticket.complaint_image_url }}" target="_blank">Preview Citizen Image</a>
+                        <img src="{{ ticket.complaint_image_url }}" alt="Citizen complaint image">
+                    </div>
+                {% endif %}
+
+                {% if ticket.proof_url %}
+                    <div class="proof-block">
+                        <span class="detail-label">Resolution Proof</span>
+                        <img src="{{ ticket.proof_url }}" alt="Resolution proof">
+                    </div>
+                {% endif %}
+            </article>
+        {% else %}
+            <p class="muted">No admin tickets yet.</p>
+        {% endfor %}
+    </div>
+</section>
+{% endblock %}
