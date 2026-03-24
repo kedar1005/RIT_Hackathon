@@ -163,6 +163,19 @@ def show_user_dashboard():
                     method=result.get('method', 'text')
                 )
 
+                # Map category to worker department
+                CATEGORY_TO_DEPT = {
+                    "Roads & Potholes": "Roads & Infrastructure",
+                    "Streetlight & Electricity": "Electricity & Streetlights",
+                    "Garbage & Waste Management": "Sanitation & Waste",
+                    "Water Supply Issues": "Water Supply",
+                    "Drainage & Water Logging": "Drainage & Sewerage",
+                    "Tree Fall & Maintenance": "Parks & Tree Maintenance",
+                    "Traffic & Parking": "Traffic Management",
+                    "Public Safety & Others": "Public Safety & General"
+                }
+                dept = CATEGORY_TO_DEPT.get(result.get('category', category), "Public Safety & General")
+
                 # Save to database
                 try:
                     complaint_id = add_complaint(
@@ -179,7 +192,8 @@ def show_user_dashboard():
                         user_urgency=user_urgency,
                         ai_confidence=result.get('confidence', 0.0),
                         ai_method=result.get('method', 'text'),
-                        estimated_resolution=result.get('resolution_time', '')
+                        estimated_resolution=result.get('resolution_time', ''),
+                        department=dept
                     )
 
                     if complaint_id:

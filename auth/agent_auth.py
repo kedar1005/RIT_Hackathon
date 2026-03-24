@@ -5,7 +5,7 @@ Login and registration for resolution agents.
 import hashlib
 import re
 import streamlit as st
-from utils.data_utils import add_agent, authenticate_agent
+from utils.data_utils import add_agent, authenticate_agent, create_session
 from utils.ui_utils import inject_global_css, hero_header, styled_error, styled_success
 
 
@@ -70,6 +70,11 @@ def show_agent_auth():
                 # ─── CONSTANT ADMIN LOGIN ───
                 # ID: AGT0001, Password: admin123
                 if agent_id.upper() == "AGT0001" and password == "admin123":
+                    # Create persistent session
+                    sid = create_session(1, 'agent')
+                    if sid:
+                        st.query_params["session"] = sid
+                        
                     st.session_state.authenticated = True
                     st.session_state.user_type = 'agent'
                     st.session_state.is_admin = True
@@ -87,6 +92,11 @@ def show_agent_auth():
                 password_hash = _hash_password(password)
                 agent = authenticate_agent(agent_id, password_hash)
                 if agent:
+                    # Create persistent session
+                    sid = create_session(agent['id'], 'agent')
+                    if sid:
+                        st.query_params["session"] = sid
+                        
                     st.session_state.authenticated = True
                     st.session_state.user_type = 'agent'
                     # Even if logging in via DB, double check ID for admin privileges
@@ -144,6 +154,11 @@ def show_worker_auth():
                 password_hash = _hash_password(password)
                 agent = authenticate_agent(agent_id, password_hash)
                 if agent:
+                    # Create persistent session
+                    sid = create_session(agent['id'], 'worker')
+                    if sid:
+                        st.query_params["session"] = sid
+                        
                     st.session_state.authenticated = True
                     st.session_state.user_type = 'worker'
                     st.session_state.is_admin = False

@@ -18,7 +18,7 @@ st.set_page_config(
 )
 
 # ─── IMPORTS ──────────────────────────────────────────────────────────
-from utils.data_utils import init_database
+from utils.data_utils import init_database, get_active_session, delete_session, cleanup_sessions
 from utils.ui_utils import inject_global_css, sidebar_logo
 from dashboard.landing import show_landing_page
 from dashboard.user_dashboard import show_user_dashboard
@@ -43,6 +43,34 @@ if 'user_type' not in st.session_state:
     st.session_state.user_type = None
 if 'current_user' not in st.session_state:
     st.session_state.current_user = {}
+
+# ─── SESSION RESTORATION ──────────────────────────────────────────────
+# Cleanup old sessions once per run (optional optimization)
+if 'cleanup_done' not in st.session_state:
+    cleanup_sessions()
+    st.session_state.cleanup_done = True
+
+# Check for session in URL
+session_id = st.query_params.get("session")
+if session_id and not st.session_state.authenticated:
+    session_data = get_active_session(session_id)
+    if session_data:
+        st.session_state.authenticated = True
+        st.session_state.user_type = session_data["session_info"]["user_type"]
+        st.session_state.current_user = session_data["user_data"]
+        # Determine page based on user type
+        if st.session_state.user_type == 'citizen':
+            st.session_state.page = 'user_auth'
+        elif st.session_state.user_type == 'worker':
+            st.session_state.page = 'worker_auth'
+        else:
+            st.session_state.page = 'agent_auth'
+        
+        # Admin flag
+        if st.session_state.user_type == 'agent' and session_data["user_data"].get('agent_id') == 'AGT0001':
+            st.session_state.is_admin = True
+        else:
+            st.session_state.is_admin = False
 
 # ─── INJECT GLOBAL CSS ───────────────────────────────────────────────
 inject_global_css()
@@ -132,6 +160,12 @@ if st.session_state.authenticated:
     # Logout button
     st.sidebar.markdown("<br>", unsafe_allow_html=True)
     if st.sidebar.button("🚪 Logout", use_container_width=True):
+        # Delete session from DB and URL
+        sid = st.query_params.get("session")
+        if sid:
+            delete_session(sid)
+            st.query_params.clear()
+            
         st.session_state.authenticated = False
         st.session_state.user_type = None
         st.session_state.current_user = {}

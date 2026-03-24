@@ -30,6 +30,7 @@ def init_database():
         name TEXT NOT NULL,
         email TEXT UNIQUE NOT NULL,
         password_hash TEXT NOT NULL,
+        identity_id TEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         last_login TIMESTAMP,
         status TEXT DEFAULT 'active'
@@ -64,6 +65,7 @@ def init_database():
         ai_method TEXT DEFAULT 'text',
         status TEXT DEFAULT 'Pending',
         assigned_agent TEXT,
+        department TEXT,
         resolution_notes TEXT,
         estimated_resolution TEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -120,6 +122,13 @@ def init_database():
         correction_samples INTEGER DEFAULT 0,
         notes TEXT
     );
+    
+    CREATE TABLE IF NOT EXISTS sessions (
+        session_id TEXT PRIMARY KEY,
+        user_id INTEGER NOT NULL,
+        user_type TEXT NOT NULL,
+        expires_at TIMESTAMP NOT NULL
+    );
     """)
 
     # Create indexes
@@ -131,11 +140,20 @@ def init_database():
         "CREATE INDEX IF NOT EXISTS idx_complaints_user ON complaints(user_id)",
         "CREATE INDEX IF NOT EXISTS idx_complaints_agent ON complaints(assigned_agent)",
         "CREATE INDEX IF NOT EXISTS idx_complaints_hash ON complaints(image_hash)",
-        "CREATE INDEX IF NOT EXISTS idx_corrections_date ON corrections(corrected_at)",
+        "CREATE INDEX IF NOT EXISTS idx_agents_dept ON agents(department)"
     ]
-    for stmt in index_statements:
+    for statement in index_statements:
         try:
-            cursor.execute(stmt)
+            cursor.execute(statement)
+        except Exception:
+            pass
+
+    # Migration: Add department column to complaints if it doesn't exist
+    try:
+        cursor.execute("SELECT department FROM complaints LIMIT 1")
+    except sqlite3.OperationalError:
+        try:
+            cursor.execute("ALTER TABLE complaints ADD COLUMN department TEXT")
         except Exception:
             pass
 
@@ -148,6 +166,10 @@ def init_database():
         cursor.execute("ALTER TABLE users ADD COLUMN pincode TEXT")
     except Exception:
         pass
+    try:
+        cursor.execute("ALTER TABLE users ADD COLUMN identity_id TEXT")
+    except Exception:
+        pass
 
     conn.commit()
     conn.close()
@@ -155,14 +177,14 @@ def init_database():
 
 # ─── USER OPERATIONS ──────────────────────────────────────────────────
 
-def add_user(name, email, password_hash, city=None, pincode=None):
+def add_user(name, email, password_hash, city=None, pincode=None, identity_id=None):
     """Register a new citizen."""
     try:
         conn = get_connection()
         cursor = conn.cursor()
         cursor.execute(
-            "INSERT INTO users (name, email, password_hash, city, pincode) VALUES (?, ?, ?, ?, ?)",
-            (name, email, password_hash, city, pincode)
+            "INSERT INTO users (name, email, password_hash, city, pincode, identity_id) VALUES (?, ?, ?, ?, ?, ?)",
+            (name, email, password_hash, city, pincode, identity_id)
         )
         conn.commit()
         user_id = cursor.lastrowid
@@ -244,7 +266,7 @@ def authenticate_agent(agent_id, password_hash):
 def add_complaint(user_id, category, description, address, landmark,
                   image_path, image_hash, lat, lon, ai_urgency,
                   user_urgency, ai_confidence, ai_method,
-                  estimated_resolution=""):
+                  estimated_resolution="", department="General"):
     """Insert a new complaint and return its ID."""
     try:
         conn = get_connection()
@@ -255,12 +277,12 @@ def add_complaint(user_id, category, description, address, landmark,
             (user_id, category, description, address, landmark,
              image_path, image_hash, lat, lon, ai_urgency,
              user_urgency, ai_confidence, ai_method,
-             estimated_resolution, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             estimated_resolution, department, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (user_id, category, description, address, landmark,
               image_path, image_hash, lat, lon, ai_urgency,
               user_urgency, ai_confidence, ai_method,
-              estimated_resolution, now, now))
+              estimated_resolution, department, now, now))
         complaint_id = cursor.lastrowid
 
         # Record initial status
@@ -410,7 +432,7 @@ def search_complaints(term=None, status_filter=None, urgency_filter=None,
             query += " AND category = ?"
             params.append(category_filter)
         if department_filter:
-            query += " AND category = ?"
+            query += " AND LOWER(TRIM(department)) = LOWER(TRIM(?))"
             params.append(department_filter)
 
         query += """
@@ -712,3 +734,82 @@ def get_daily_trend(days=30):
         return rows
     except Exception:
         return []
+
+
+# ─── SESSION OPERATIONS ───────────────────────────────────────────────
+
+import secrets
+
+def create_session(user_id, user_type, duration_minutes=10):
+    """Create a persistent session and return the ID."""
+    try:
+        session_id = secrets.token_urlsafe(32)
+        conn = get_connection()
+        cursor = conn.cursor()
+        expires_at = (datetime.now().timestamp() + (duration_minutes * 60))
+        cursor.execute(
+            "INSERT INTO sessions (session_id, user_id, user_type, expires_at) VALUES (?, ?, ?, ?)",
+            (session_id, user_id, user_type, expires_at)
+        )
+        conn.commit()
+        conn.close()
+        return session_id
+    except Exception as e:
+        print(f"Error creating session: {e}")
+        return None
+
+def get_active_session(session_id):
+    """Retrieve an active session if not expired."""
+    try:
+        conn = get_connection()
+        cursor = conn.cursor()
+        now = datetime.now().timestamp()
+        
+        cursor.execute("SELECT * FROM sessions WHERE session_id = ? AND expires_at > ?", (session_id, now))
+        session = cursor.fetchone()
+        
+        if not session:
+            conn.close()
+            return None
+            
+        if session["user_type"] == "citizen":
+            cursor.execute("SELECT id, name, email FROM users WHERE id = ?", (session["user_id"],))
+        else:
+            cursor.execute("SELECT id, name, agent_id, department FROM agents WHERE id = ?", (session["user_id"],))
+            
+        user_data = cursor.fetchone()
+        conn.close()
+        
+        if user_data:
+            return {
+                "session_info": dict(session),
+                "user_data": dict(user_data)
+            }
+        return None
+    except Exception as e:
+        print(f"Error getting session: {e}")
+        return None
+
+def delete_session(session_id):
+    """Remove a session from the database."""
+    try:
+        conn = get_connection()
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM sessions WHERE session_id = ?", (session_id,))
+        conn.commit()
+        conn.close()
+        return True
+    except Exception:
+        return False
+
+def cleanup_sessions():
+    """Remove expired sessions."""
+    try:
+        conn = get_connection()
+        cursor = conn.cursor()
+        now = datetime.now().timestamp()
+        cursor.execute("DELETE FROM sessions WHERE expires_at < ?", (now,))
+        conn.commit()
+        conn.close()
+    except Exception:
+        pass

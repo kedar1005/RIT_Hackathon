@@ -684,7 +684,7 @@ def show_worker_dashboard():
         term=search_f if search_f else None,
         status_filter=status_f,
         urgency_filter=urgency_f,
-        department_filter=worker_dept
+        department_filter=worker_dept.strip()
     )
 
     # Summary stats
