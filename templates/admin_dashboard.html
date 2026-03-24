@@ -32,7 +32,13 @@
                 {% endfor %}
             </select>
             <button class="button button-secondary" type="submit">Apply Filters</button>
-            <a class="button button-secondary" href="{{ url_for('admin_export', status=selected_status, urgency=selected_urgency, category=selected_category) }}">Export CSV</a>
+            <select name="export_format">
+                <option value="csv">CSV</option>
+                <option value="pdf">PDF</option>
+                <option value="word">Word</option>
+                <option value="json">JSON</option>
+            </select>
+            <button class="button button-secondary" type="submit" formaction="{{ url_for('admin_export') }}">Generate Report</button>
         </form>
 
         <div class="complaint-list">

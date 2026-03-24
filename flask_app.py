@@ -586,15 +586,45 @@ def admin_export():
         flash("Admin access is required.", "error")
         return redirect(url_for("home"))
 
+    export_format = request.args.get("export_format", "csv").lower()
+    
     dataframe = export_complaints_csv(
         status_filter=None if request.args.get("status", "All") == "All" else request.args.get("status"),
         category_filter=None if request.args.get("category", "All") == "All" else request.args.get("category"),
         urgency_filter=None if request.args.get("urgency", "All") == "All" else request.args.get("urgency"),
     )
+    
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M')
+    base_name = f"complaints_export_{timestamp}"
     buffer = BytesIO()
-    dataframe.to_csv(buffer, index=False)
-    buffer.seek(0)
-    return send_file(buffer, mimetype="text/csv", as_attachment=True, download_name="complaints_export.csv")
+
+    if export_format == "json":
+        json_data = dataframe.to_json(orient="records", indent=4)
+        buffer.write(json_data.encode('utf-8'))
+        buffer.seek(0)
+        return send_file(buffer, mimetype="application/json", as_attachment=True, download_name=f"{base_name}.json")
+        
+    elif export_format == "word":
+        from utils.report_utils import generate_word_report
+        word_bytes = generate_word_report(dataframe)
+        buffer.write(word_bytes)
+        buffer.seek(0)
+        return send_file(buffer, mimetype="application/vnd.openxmlformats-officedocument.wordprocessingml.document", as_attachment=True, download_name=f"{base_name}.docx")
+        
+    elif export_format == "pdf":
+        from utils.report_utils import generate_pdf_report
+        pdf_bytes = generate_pdf_report(dataframe)
+        buffer.write(pdf_bytes)
+        buffer.seek(0)
+        return send_file(buffer, mimetype="application/pdf", as_attachment=True, download_name=f"{base_name}.pdf")
+        
+    else:
+        # Default CSV
+        dataframe.to_csv(buffer, index=False)
+        buffer.seek(0)
+        return send_file(buffer, mimetype="text/csv", as_attachment=True, download_name=f"{base_name}.csv")
+
+
 
 
 @app.route("/worker/dashboard")
