@@ -18,7 +18,9 @@ from utils.data_utils import (
     export_complaints_csv, get_model_versions, get_all_corrections,
     get_agent_leaderboard, get_daily_trend, add_agent,
     get_tickets_for_admin, get_unread_count_admin, mark_tickets_read_admin,
-    get_tickets_by_department, get_unread_count_worker, mark_tickets_read_worker
+    get_tickets_by_department, get_unread_count_worker, mark_tickets_read_worker,
+    get_all_workers, warn_worker, unblock_worker, get_departments_without_active_workers,
+    is_worker_blocked
 )
 from ml.model import CATEGORIES, check_and_retrain
 from ml.model_tracker import (
@@ -283,7 +285,7 @@ def show_agent_dashboard():
                         gradient={0.2: 'blue', 0.4: 'lime', 0.6: 'yellow', 1: 'red'}
                     ).add_to(m)
 
-                st_folium(m, use_container_width=True, height=500)
+                st_folium(m, width=None, height=500)
 
                 # Map legend
                 st.markdown("""
@@ -302,10 +304,10 @@ def show_agent_dashboard():
                 </div>
                 """, unsafe_allow_html=True)
 
-            except ImportError:
-                styled_warning("Folium or streamlit-folium not installed. Run: pip install folium streamlit-folium")
+            except ImportError as ie:
+                styled_warning(f"Missing library: {ie}. Run: pip install folium streamlit-folium")
             except Exception as e:
-                styled_error(f"Map error: {str(e)[:100]}")
+                styled_error(f"Map error: {str(e)[:200]}")
 
     # ═══════════════════════════════════════════════════════════════════
     # TAB 3: AI INTELLIGENCE CENTER
@@ -606,56 +608,106 @@ def show_agent_dashboard():
                 styled_error(f"Export error: {str(e)[:80]}")
 
     # ═══════════════════════════════════════════════════════════════════
-    # TAB 5: ADD AGENTS (ADMIN ONLY)
+    # TAB 5: ADD AGENTS + WORKER MANAGEMENT (ADMIN ONLY)
     # ═══════════════════════════════════════════════════════════════════
     if tab_add_agents is not None:
         with tab_add_agents:
-            section_header("Register New Agent",
-                           "Admin-only: Add a new agent to the system",
+            section_header("Manage Workers",
+                           "Register new agents and manage warnings / blocks",
                            accent="purple")
 
-            st.markdown("""
-            <div style="max-width:500px;margin:0 auto;padding:1.5rem;
-                background:#111827;border:1px solid rgba(124,58,237,0.2);
-                border-radius:16px;">
-                <h3 style="font-family:'Sora',sans-serif;font-size:18px;font-weight:600;
-                    color:#F0F4FF;text-align:center;margin-bottom:0.5rem;">➕ Add New Agent</h3>
+            # ── REGISTER NEW AGENT ──
+            with st.expander("➕ Register New Agent", expanded=True):
+                st.markdown("""
                 <p style="font-family:'DM Sans',sans-serif;font-size:12px;color:#8B98B8;
-                    text-align:center;">Fill in agent details and assign a department</p>
-            </div>
+                    margin-bottom:8px;">Fill in agent details and assign a department</p>
+                """, unsafe_allow_html=True)
+
+                with st.form("admin_register_agent_form", clear_on_submit=True):
+                    from auth.agent_auth import DEPARTMENTS, _hash_password, _validate_agent_id
+
+                    reg_name = st.text_input("Full Name", placeholder="Officer Rahul Mehta")
+                    reg_agent_id = st.text_input("Agent ID", placeholder="AGT0002")
+                    reg_department = st.selectbox("Assign Department", DEPARTMENTS)
+                    reg_password = st.text_input("Create Password", type="password",
+                                                 placeholder="Min 6 characters")
+                    reg_confirm = st.text_input("Confirm Password", type="password")
+                    reg_submitted = st.form_submit_button("Register Agent →",
+                                                           use_container_width=True)
+
+                    if reg_submitted:
+                        if not all([reg_name, reg_agent_id, reg_password, reg_confirm]):
+                            styled_error("Please fill in all fields")
+                        elif not _validate_agent_id(reg_agent_id):
+                            styled_error("Agent ID must be AGT followed by 4 digits (e.g., AGT0002)")
+                        elif reg_password != reg_confirm:
+                            styled_error("Passwords do not match")
+                        elif len(reg_password) < 6:
+                            styled_error("Password must be at least 6 characters")
+                        else:
+                            password_hash = _hash_password(reg_password)
+                            result = add_agent(reg_name, reg_agent_id, password_hash, reg_department)
+                            if result:
+                                styled_success(f"Agent {reg_agent_id} ({reg_department}) registered successfully!")
+                            else:
+                                styled_error("Agent ID already registered.")
+
+            # ── WORKER WARNING & BLOCK MANAGEMENT ──
+            st.markdown("<br>", unsafe_allow_html=True)
+            st.markdown("""
+            <div style="font-family:'Sora',sans-serif;font-size:15px;font-weight:600;
+                color:#F0F4FF;margin-bottom:12px;">⚠️ Worker Warning & Block Management</div>
             """, unsafe_allow_html=True)
 
-            with st.form("admin_register_agent_form", clear_on_submit=True):
-                from auth.agent_auth import DEPARTMENTS, _hash_password, _validate_agent_id
+            all_workers = get_all_workers()
+            if not all_workers:
+                st.info("No workers registered yet.")
+            else:
+                for w in all_workers:
+                    is_blocked = bool(w.get('is_blocked', 0))
+                    warn_count = int(w.get('warning_count', 0) or 0)
+                    status_color = "#FF4444" if is_blocked else "#39FF14"
+                    status_label = "🔴 Blocked" if is_blocked else "🟢 Active"
 
-                reg_name = st.text_input("Full Name", placeholder="Officer Rahul Mehta")
-                reg_agent_id = st.text_input("Agent ID", placeholder="AGT0002")
-                reg_department = st.selectbox("Assign Department", DEPARTMENTS)
-                reg_password = st.text_input("Create Password", type="password",
-                                             placeholder="Min 6 characters")
-                reg_confirm = st.text_input("Confirm Password", type="password")
-                reg_submitted = st.form_submit_button("Register Agent →",
-                                                       use_container_width=True)
-
-                if reg_submitted:
-                    if not all([reg_name, reg_agent_id, reg_password, reg_confirm]):
-                        styled_error("Please fill in all fields")
-                    elif not _validate_agent_id(reg_agent_id):
-                        styled_error("Agent ID must be AGT followed by 4 digits (e.g., AGT0002)")
-                    elif reg_password != reg_confirm:
-                        styled_error("Passwords do not match")
-                    elif len(reg_password) < 6:
-                        styled_error("Password must be at least 6 characters")
-                    else:
-                        password_hash = _hash_password(reg_password)
-                        result = add_agent(reg_name, reg_agent_id, password_hash, reg_department)
-                        if result:
-                            styled_success(f"Agent {reg_agent_id} ({reg_department}) registered successfully!")
+                    wk_col1, wk_col2, wk_col3, wk_col4 = st.columns([3, 2, 2, 2])
+                    with wk_col1:
+                        st.markdown(f"""
+                        <div style="font-family:'DM Sans',sans-serif;font-size:13px;color:#F0F4FF;">
+                            <strong>{w['name']}</strong>
+                            <span style="font-size:11px;color:#8B98B8;"> — {w['agent_id']}</span><br>
+                            <span style="font-size:11px;color:#4A5568;">{w['department']}</span>
+                        </div>
+                        """, unsafe_allow_html=True)
+                    with wk_col2:
+                        st.markdown(f"""
+                        <div style="font-family:'JetBrains Mono',monospace;font-size:11px;
+                            color:{status_color};padding-top:8px;">{status_label}</div>
+                        """, unsafe_allow_html=True)
+                    with wk_col3:
+                        warn_color = "#FF4444" if warn_count >= 2 else "#F59E0B" if warn_count == 1 else "#8B98B8"
+                        st.markdown(f"""
+                        <div style="font-family:'DM Sans',sans-serif;font-size:12px;
+                            color:{warn_color};padding-top:8px;">⚠️ {warn_count}/3 warnings</div>
+                        """, unsafe_allow_html=True)
+                    with wk_col4:
+                        if is_blocked:
+                            if st.button("🔓 Unblock", key=f"unblock_{w['agent_id']}"):
+                                unblock_worker(w['agent_id'])
+                                styled_success(f"{w['name']} unblocked and warnings reset.")
+                                st.rerun()
                         else:
-                            styled_error("Agent ID already registered.")
+                            if st.button("⚠️ Warn", key=f"warn_{w['agent_id']}"):
+                                new_count, now_blocked = warn_worker(w['agent_id'])
+                                if now_blocked:
+                                    styled_warning(f"⛔ {w['name']} has been automatically BLOCKED after {new_count} warnings.")
+                                elif new_count is not None:
+                                    styled_warning(f"Warning {new_count}/3 issued to {w['name']}.")
+                                st.rerun()
+                    st.markdown("<hr style='border-color:rgba(255,255,255,0.05);margin:6px 0;'>",
+                                unsafe_allow_html=True)
 
     # ═══════════════════════════════════════════════════════════════════
-    # TAB 5: INBOX (ALL USERS — ADMIN VIEW)
+    # TAB 6: INBOX (ALL USERS — ADMIN VIEW)
     # ═══════════════════════════════════════════════════════════════════
     with tab_inbox:
         section_header("📥 Inbox — Citizen Tickets",
@@ -664,6 +716,21 @@ def show_agent_dashboard():
 
         tickets = get_tickets_for_admin()
         mark_tickets_read_admin()  # Mark all as read when inbox is opened
+
+        # ── Department health alerts ──
+        empty_depts = get_departments_without_active_workers()
+        for dept in empty_depts:
+            st.markdown(f"""
+            <div style="background:rgba(255,68,68,0.08);border:1px solid rgba(255,68,68,0.3);
+                border-radius:10px;padding:0.75rem 1rem;margin-bottom:0.5rem;
+                display:flex;align-items:center;gap:10px;">
+                <span style="font-size:1.2rem;">⚠️</span>
+                <div style="font-family:'DM Sans',sans-serif;font-size:13px;color:#FF8585;">
+                    <strong>No active workers</strong> in <strong>{dept}</strong>.
+                    Please create a new worker or unblock an existing worker.
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
 
         if not tickets:
             st.markdown("""
@@ -710,6 +777,22 @@ def show_worker_dashboard():
 
     if not worker_dept:
         styled_warning("No department assigned to your account. Contact your admin.")
+        return
+
+    # ── Block check: if blocked, show message and stop ──
+    if is_worker_blocked(worker_id):
+        st.markdown("""
+        <div style="background:rgba(255,68,68,0.08);border:1px solid rgba(255,68,68,0.3);
+            border-radius:12px;padding:2rem;text-align:center;margin-top:2rem;">
+            <div style="font-size:2rem;margin-bottom:0.5rem;">⛔</div>
+            <div style="font-family:'Sora',sans-serif;font-size:18px;font-weight:700;
+                color:#FF4444;margin-bottom:0.5rem;">Account Temporarily Blocked</div>
+            <div style="font-family:'DM Sans',sans-serif;font-size:13px;color:#8B98B8;">
+                Your account has been temporarily blocked by admin after receiving 3 warnings.<br>
+                Please contact your administrator to resolve this.
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
         return
 
     # Build worker tabs with unread notification badge

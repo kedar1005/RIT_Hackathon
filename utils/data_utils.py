@@ -183,6 +183,16 @@ def init_database():
     except Exception:
         pass
 
+    # Migration: Add warning/block columns to agents table
+    try:
+        cursor.execute("ALTER TABLE agents ADD COLUMN warning_count INTEGER DEFAULT 0")
+    except Exception:
+        pass
+    try:
+        cursor.execute("ALTER TABLE agents ADD COLUMN is_blocked INTEGER DEFAULT 0")
+    except Exception:
+        pass
+
     conn.commit()
     conn.close()
 
@@ -933,3 +943,108 @@ def get_unread_count_worker(dept):
         return count
     except Exception:
         return 0
+
+
+# ─── WORKER MANAGEMENT OPERATIONS ────────────────────────────────────
+
+def get_all_workers():
+    """Return all workers (non-admin agents) with warning/block status."""
+    try:
+        conn = get_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            """SELECT id, name, agent_id, department,
+                      COALESCE(warning_count, 0) as warning_count,
+                      COALESCE(is_blocked, 0) as is_blocked
+               FROM agents WHERE agent_id != 'AGT0001'
+               ORDER BY department, name"""
+        )
+        rows = [dict(r) for r in cursor.fetchall()]
+        conn.close()
+        return rows
+    except Exception:
+        return []
+
+
+def warn_worker(agent_id, max_warnings=3):
+    """Increment warning count for a worker; auto-block if >= max_warnings.
+    Returns (new_count, is_now_blocked).
+    """
+    try:
+        conn = get_connection()
+        cursor = conn.cursor()
+        # Fetch current state
+        cursor.execute(
+            "SELECT COALESCE(warning_count, 0), COALESCE(is_blocked, 0) FROM agents WHERE agent_id = ?",
+            (agent_id,)
+        )
+        row = cursor.fetchone()
+        if not row:
+            conn.close()
+            return None, None
+        current_count, already_blocked = row[0], row[1]
+        if already_blocked:
+            conn.close()
+            return current_count, True  # already blocked, don't increment further
+
+        new_count = current_count + 1
+        is_now_blocked = 1 if new_count >= max_warnings else 0
+        cursor.execute(
+            "UPDATE agents SET warning_count = ?, is_blocked = ? WHERE agent_id = ?",
+            (new_count, is_now_blocked, agent_id)
+        )
+        conn.commit()
+        conn.close()
+        return new_count, bool(is_now_blocked)
+    except Exception as e:
+        print(f"Error warning worker: {e}")
+        return None, None
+
+
+def unblock_worker(agent_id):
+    """Reset warning count and unblock a worker."""
+    try:
+        conn = get_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "UPDATE agents SET is_blocked = 0, warning_count = 0 WHERE agent_id = ?",
+            (agent_id,)
+        )
+        conn.commit()
+        conn.close()
+        return True
+    except Exception:
+        return False
+
+
+def is_worker_blocked(agent_id):
+    """Return True if the worker is blocked."""
+    try:
+        conn = get_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT COALESCE(is_blocked, 0) FROM agents WHERE agent_id = ?",
+            (agent_id,)
+        )
+        row = cursor.fetchone()
+        conn.close()
+        return bool(row[0]) if row else False
+    except Exception:
+        return False
+
+
+def get_departments_without_active_workers():
+    """Return list of departments that have no unblocked workers."""
+    try:
+        from auth.agent_auth import DEPARTMENTS
+        conn = get_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            """SELECT DISTINCT department FROM agents
+               WHERE agent_id != 'AGT0001' AND COALESCE(is_blocked, 0) = 0"""
+        )
+        active_depts = {row[0] for row in cursor.fetchall()}
+        conn.close()
+        return [d for d in DEPARTMENTS if d not in active_depts]
+    except Exception:
+        return []
