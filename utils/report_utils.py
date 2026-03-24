@@ -1,191 +1,170 @@
-import pandas as pd
+from datetime import datetime
+from html import escape
 import io
 
-def generate_word_report(df: pd.DataFrame) -> bytes:
-    from docx import Document
-    from docx.shared import Pt, Inches
-    from docx.enum.section import WD_ORIENT
-    
-    doc = Document()
-    
-    # Set to Landscape for better table fitting
-    section = doc.sections[0]
-    new_width, new_height = section.page_height, section.page_width
-    section.orientation = WD_ORIENT.LANDSCAPE
-    section.page_width = new_width
-    section.page_height = new_height
-    
-    doc.add_heading('Citizen AI - Complaints Report', 0)
-    
-    if df.empty:
-        doc.add_paragraph("No data available for the selected filters.")
-    else:
-        # Convert all to string
-        df = df.astype(str)
-        
-        # Create a single table, one row per complaint
-        table = doc.add_table(rows=1, cols=len(df.columns))
-        table.style = 'Table Grid'
-        
-        # Header Row
-        hdr_cells = table.rows[0].cells
-        for i, column in enumerate(df.columns):
-            hdr_cells[i].text = str(column).replace('_', ' ').title()
-            # Make header bold
-            for paragraph in hdr_cells[i].paragraphs:
-                for run in paragraph.runs:
-                    run.font.bold = True
-            
-        # Data Rows
-        for _, row in df.iterrows():
-            row_cells = table.add_row().cells
-            for i, val in enumerate(row):
-                row_cells[i].text = str(val)
-                
-    # --- ADD CHARTS ---
-    doc.add_page_break()
-    doc.add_heading('Analytics Dashboard', 1)
-    
-    try:
-        from utils.data_utils import get_complaint_stats, get_daily_trend, get_agent_leaderboard
-        from ml.model_tracker import get_category_distribution_chart, get_urgency_donut, get_daily_trend_chart, get_agent_leaderboard_chart
-        
-        stats = get_complaint_stats()
-        
-        # 1. Category Chart
-        by_cat = stats.get('by_category', [])
-        if by_cat:
-            fig_cat = get_category_distribution_chart(by_cat)
-            img_cat = fig_cat.to_image(format="png", width=800, height=500)
-            doc.add_heading('Complaints by Category', 2)
-            doc.add_picture(io.BytesIO(img_cat), width=Inches(6.0))
-            
-        # 2. Urgency Donut
-        high = stats.get('urgency_high', 0)
-        medium = stats.get('urgency_medium', 0)
-        low = stats.get('urgency_low', 0)
-        if high > 0 or medium > 0 or low > 0:
-            fig_urg = get_urgency_donut(high, medium, low)
-            img_urg = fig_urg.to_image(format="png", width=800, height=500)
-            doc.add_heading('Urgency Distribution', 2)
-            doc.add_picture(io.BytesIO(img_urg), width=Inches(6.0))
-        
-        # 3. Daily Trend
-        daily = get_daily_trend(30)
-        if daily:
-            fig_trend = get_daily_trend_chart(daily)
-            img_trend = fig_trend.to_image(format="png", width=800, height=500)
-            doc.add_heading('Daily Trend (30 days)', 2)
-            doc.add_picture(io.BytesIO(img_trend), width=Inches(6.0))
-            
-        # 4. Agent Leaderboard
-        agents = get_agent_leaderboard()
-        if agents:
-            fig_agents = get_agent_leaderboard_chart(agents)
-            img_agents = fig_agents.to_image(format="png", width=800, height=500)
-            doc.add_heading('Agent Leaderboard', 2)
-            doc.add_picture(io.BytesIO(img_agents), width=Inches(6.0))
-            
-    except Exception as e:
-        doc.add_paragraph(f"Could not load charts: {str(e)}")
+import pandas as pd
 
-    buffer = io.BytesIO()
-    doc.save(buffer)
-    return buffer.getvalue()
+
+REPORT_COLUMNS = [
+    "id",
+    "category",
+    "ai_urgency",
+    "status",
+    "assigned_agent",
+    "created_at",
+    "address",
+]
+
+
+def _prepare_dataframe(df: pd.DataFrame) -> pd.DataFrame:
+    if df is None or df.empty:
+        return pd.DataFrame(columns=REPORT_COLUMNS)
+
+    available = [column for column in REPORT_COLUMNS if column in df.columns]
+    if not available:
+        available = list(df.columns)[:7]
+
+    prepared = df[available].copy()
+    prepared = prepared.fillna("")
+    prepared.columns = [column.replace("_", " ").title() for column in prepared.columns]
+    return prepared.astype(str)
+
+
+def generate_word_report(df: pd.DataFrame) -> bytes:
+    prepared = _prepare_dataframe(df)
+    generated_at = datetime.now().strftime("%d %b %Y %I:%M %p")
+
+    if prepared.empty:
+        table_html = """
+        <tr>
+            <td colspan="7" style="padding:12px;border:1px solid #cbd5e1;">No data available for the selected filters.</td>
+        </tr>
+        """
+    else:
+        header_html = "".join(
+            f"<th style='padding:10px;border:1px solid #94a3b8;background:#e2e8f0;text-align:left;'>{escape(column)}</th>"
+            for column in prepared.columns
+        )
+        row_html = []
+        for _, row in prepared.iterrows():
+            row_html.append(
+                "<tr>" +
+                "".join(
+                    f"<td style='padding:9px;border:1px solid #cbd5e1;vertical-align:top;'>{escape(str(value))}</td>"
+                    for value in row
+                ) +
+                "</tr>"
+            )
+        table_html = f"<tr>{header_html}</tr>{''.join(row_html)}"
+
+    html = f"""<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>CitiZen AI Complaints Report</title>
+<style>
+body {{ font-family: Calibri, Arial, sans-serif; color: #0f172a; margin: 28px; }}
+h1 {{ margin: 0 0 6px; font-size: 24px; }}
+p.meta {{ margin: 0 0 20px; color: #475569; }}
+table {{ width: 100%; border-collapse: collapse; table-layout: fixed; }}
+th, td {{ word-wrap: break-word; font-size: 10pt; }}
+</style>
+</head>
+<body>
+<h1>CitiZen AI Complaints Report</h1>
+<p class="meta">Generated on {escape(generated_at)} | Total rows: {len(prepared)}</p>
+<table>{table_html}</table>
+</body>
+</html>"""
+    return html.encode("utf-8")
+
+
+def _truncate_text(value: str, limit: int) -> str:
+    clean = " ".join(value.split())
+    if len(clean) <= limit:
+        return clean
+    return clean[: limit - 3] + "..."
+
 
 def generate_pdf_report(df: pd.DataFrame) -> bytes:
-    from fpdf import FPDF
-    
-    pdf = FPDF(orientation="Landscape")
-    pdf.add_page()
-    pdf.set_font("helvetica", "B", 16)
-    pdf.cell(0, 10, "Citizen AI - Complaints Report", new_x="LMARGIN", new_y="NEXT", align="C")
-    pdf.ln(5)
-    
-    if df.empty:
-        pdf.set_font("helvetica", "", 12)
-        pdf.cell(0, 10, "No data available for the selected filters.")
-    else:
-        pdf.set_font("helvetica", "B", 9)
-        priority_cols = ['id', 'category', 'ai_urgency', 'status', 'created_at', 'department']
-        cols = [c for c in priority_cols if c in df.columns]
-        if not cols:
-            cols = list(df.columns)[:6]
-            
-        col_width = 280 / len(cols)
-        
-        for col in cols:
-            pdf.cell(col_width, 10, str(col).upper(), border=1)
-        pdf.ln()
-        
-        pdf.set_font("helvetica", "", 8)
-        for _, row in df.iterrows():
-            for col in cols:
-                val = str(row[col]).replace('\n', ' ')
-                val = val.encode('latin-1', 'replace').decode('latin-1')
-                if len(val) > 35:
-                    val = val[:32] + "..."
-                pdf.cell(col_width, 8, val, border=1)
-            pdf.ln()
-            
-    # --- ADD CHARTS ---
-    pdf.add_page()
-    pdf.set_font("helvetica", "B", 16)
-    pdf.cell(0, 10, "Analytics Dashboard", new_x="LMARGIN", new_y="NEXT", align="C")
-    pdf.ln(5)
-    
-    try:
-        from utils.data_utils import get_complaint_stats, get_daily_trend, get_agent_leaderboard
-        from ml.model_tracker import get_category_distribution_chart, get_urgency_donut, get_daily_trend_chart, get_agent_leaderboard_chart
-        
-        stats = get_complaint_stats()
-        
-        # 1. Category Chart
-        by_cat = stats.get('by_category', [])
-        if by_cat:
-            fig_cat = get_category_distribution_chart(by_cat)
-            img_cat = fig_cat.to_image(format="png", width=1200, height=700)
-            pdf.set_font("helvetica", "B", 12)
-            pdf.cell(0, 10, "Complaints by Category", new_x="LMARGIN", new_y="NEXT")
-            pdf.image(io.BytesIO(img_cat), w=250)
-            pdf.ln(10)
-            
-        # 2. Urgency Donut
-        high = stats.get('urgency_high', 0)
-        medium = stats.get('urgency_medium', 0)
-        low = stats.get('urgency_low', 0)
-        if high > 0 or medium > 0 or low > 0:
-            fig_urg = get_urgency_donut(high, medium, low)
-            img_urg = fig_urg.to_image(format="png", width=1200, height=700)
-            pdf.add_page()
-            pdf.set_font("helvetica", "B", 12)
-            pdf.cell(0, 10, "Urgency Distribution", new_x="LMARGIN", new_y="NEXT")
-            pdf.image(io.BytesIO(img_urg), w=250)
-            pdf.ln(10)
-        
-        # 3. Daily Trend
-        daily = get_daily_trend(30)
-        if daily:
-            fig_trend = get_daily_trend_chart(daily)
-            img_trend = fig_trend.to_image(format="png", width=1200, height=700)
-            pdf.add_page()
-            pdf.set_font("helvetica", "B", 12)
-            pdf.cell(0, 10, "Daily Trend (30 days)", new_x="LMARGIN", new_y="NEXT")
-            pdf.image(io.BytesIO(img_trend), w=250)
-            pdf.ln(10)
-            
-        # 4. Agent Leaderboard
-        agents = get_agent_leaderboard()
-        if agents:
-            fig_agents = get_agent_leaderboard_chart(agents)
-            img_agents = fig_agents.to_image(format="png", width=1200, height=700)
-            pdf.add_page()
-            pdf.set_font("helvetica", "B", 12)
-            pdf.cell(0, 10, "Agent Leaderboard", new_x="LMARGIN", new_y="NEXT")
-            pdf.image(io.BytesIO(img_agents), w=250)
-            
-    except Exception as e:
-        pdf.set_font("helvetica", "", 10)
-        pdf.cell(0, 10, f"Could not load charts: {str(e)}")
+    prepared = _prepare_dataframe(df)
+    from matplotlib.backends.backend_pdf import PdfPages
+    import matplotlib.pyplot as plt
 
-    return bytes(pdf.output())
+    buffer = io.BytesIO()
+    rows_per_page = 18
+    total_pages = max((len(prepared) + rows_per_page - 1) // rows_per_page, 1)
+    generated_at = datetime.now().strftime("%d %b %Y %I:%M %p")
+
+    with PdfPages(buffer) as pdf:
+        for page_index in range(total_pages):
+            start = page_index * rows_per_page
+            end = start + rows_per_page
+            page_rows = prepared.iloc[start:end]
+
+            fig, ax = plt.subplots(figsize=(16.5, 11.0))
+            ax.axis("off")
+
+            fig.suptitle("CitiZen AI Complaints Report", fontsize=18, fontweight="bold", y=0.98)
+            ax.text(
+                0.01,
+                0.94,
+                f"Generated on {generated_at} | Page {page_index + 1} of {total_pages} | Total rows: {len(prepared)}",
+                transform=ax.transAxes,
+                fontsize=10,
+                color="#475569",
+            )
+
+            if page_rows.empty:
+                ax.text(
+                    0.01,
+                    0.85,
+                    "No data available for the selected filters.",
+                    transform=ax.transAxes,
+                    fontsize=12,
+                    color="#0f172a",
+                )
+            else:
+                display_rows = page_rows.copy()
+                for column in display_rows.columns:
+                    limit = 42 if column == "Address" else 20
+                    display_rows[column] = display_rows[column].map(lambda value: _truncate_text(str(value), limit))
+
+                table = ax.table(
+                    cellText=display_rows.values,
+                    colLabels=display_rows.columns,
+                    loc="upper left",
+                    cellLoc="left",
+                    colLoc="left",
+                    bbox=[0.01, 0.04, 0.98, 0.84],
+                )
+                table.auto_set_font_size(False)
+                table.set_fontsize(8.5)
+                table.scale(1, 1.35)
+
+                column_widths = {
+                    "Id": 0.05,
+                    "Category": 0.15,
+                    "Ai Urgency": 0.10,
+                    "Status": 0.10,
+                    "Assigned Agent": 0.11,
+                    "Created At": 0.16,
+                    "Address": 0.31,
+                }
+
+                for (row, col), cell in table.get_celld().items():
+                    column_name = display_rows.columns[col]
+                    if column_name in column_widths:
+                        cell.set_width(column_widths[column_name])
+                    cell.set_edgecolor("#cbd5e1")
+                    if row == 0:
+                        cell.set_facecolor("#e2e8f0")
+                        cell.set_text_props(weight="bold", color="#0f172a")
+                    else:
+                        cell.set_facecolor("#ffffff" if row % 2 else "#f8fafc")
+
+            pdf.savefig(fig, bbox_inches="tight")
+            plt.close(fig)
+
+    buffer.seek(0)
+    return buffer.getvalue()

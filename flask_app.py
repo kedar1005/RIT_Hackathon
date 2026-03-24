@@ -573,8 +573,6 @@ def admin_dashboard():
     date_to = request.args.get("date_to", "").strip() or None
     page = request.args.get("page", default=1, type=int)
     unread_admin = get_unread_count_admin()
-    if unread_admin:
-        mark_tickets_read_admin()
 
     complaints = search_complaints(
         term=term,
@@ -588,6 +586,9 @@ def admin_dashboard():
     for ticket in tickets:
         detail = get_complaint_by_id(ticket.get("complaint_id")) if ticket.get("complaint_id") else None
         ticket["proof_url"] = _build_media_url(detail.get("completion_image")) if detail else None
+        ticket["complaint_image_url"] = _build_media_url(detail.get("image_path")) if detail else None
+    if unread_admin:
+        mark_tickets_read_admin()
 
     stats = get_complaint_stats()
     daily_trend = get_daily_trend(30)
@@ -633,6 +634,31 @@ def admin_dashboard():
         analytics_daily_chart=_figure_html(get_daily_trend_chart(daily_trend)) if daily_trend else None,
         analytics_leaderboard_chart=_figure_html(get_agent_leaderboard_chart(leaderboard)) if leaderboard else None,
         analytics_avg_resolution=avg_resolution_display,
+    )
+
+
+@app.route("/admin/inbox")
+@login_required(role="agent")
+def admin_inbox():
+    if not g.is_admin:
+        flash("Admin access is required.", "error")
+        return redirect(url_for("home"))
+
+    unread_admin = get_unread_count_admin()
+    tickets = get_tickets_for_admin()
+    for ticket in tickets:
+        detail = get_complaint_by_id(ticket.get("complaint_id")) if ticket.get("complaint_id") else None
+        ticket["proof_url"] = _build_media_url(detail.get("completion_image")) if detail else None
+        ticket["complaint_image_url"] = _build_media_url(detail.get("image_path")) if detail else None
+
+    if unread_admin:
+        mark_tickets_read_admin()
+
+    return render_template(
+        "admin_inbox.html",
+        tickets=tickets,
+        unread_admin=unread_admin,
+        missing_departments=get_departments_without_active_workers(),
     )
 
 
@@ -812,7 +838,7 @@ def admin_export():
         word_bytes = generate_word_report(dataframe)
         buffer.write(word_bytes)
         buffer.seek(0)
-        return send_file(buffer, mimetype="application/vnd.openxmlformats-officedocument.wordprocessingml.document", as_attachment=True, download_name=f"{base_name}.docx")
+        return send_file(buffer, mimetype="application/msword", as_attachment=True, download_name=f"{base_name}.doc")
         
     elif export_format == "pdf":
         from utils.report_utils import generate_pdf_report
