@@ -188,6 +188,36 @@
     <section class="tab-pane" data-tab-panel="admin-analytics">
         <div class="dashboard-grid dashboard-grid-fluid">
             <article class="panel panel-nested">
+                <p class="eyebrow">Analytics Filters</p>
+                <h2>Slice charts by date, department, and priority</h2>
+                <form method="get" class="filter-grid filter-grid-analytics">
+                    <input type="hidden" name="term" value="{{ search_term }}">
+                    <input type="hidden" name="status" value="{{ selected_status }}">
+                    <input type="hidden" name="urgency" value="{{ selected_urgency }}">
+                    <input type="hidden" name="category" value="{{ selected_category }}">
+                    <input type="hidden" name="city" value="{{ selected_city }}">
+                    <input type="hidden" name="date_from" value="{{ selected_date_from }}">
+                    <input type="hidden" name="date_to" value="{{ selected_date_to }}">
+                    <input type="hidden" name="tab" value="admin-analytics">
+                    <input type="date" name="analytics_date_from" value="{{ analytics_date_from }}">
+                    <input type="date" name="analytics_date_to" value="{{ analytics_date_to }}">
+                    <select name="analytics_department">
+                        <option value="All">All departments</option>
+                        {% for department in analytics_departments %}
+                            <option value="{{ department }}" {% if department == analytics_department %}selected{% endif %}>{{ department }}</option>
+                        {% endfor %}
+                    </select>
+                    <select name="analytics_priority">
+                        {% for option in ['All', 'High', 'Medium', 'Low'] %}
+                            <option value="{{ option }}" {% if option == analytics_priority %}selected{% endif %}>{{ option }}</option>
+                        {% endfor %}
+                    </select>
+                    <button class="button button-secondary" type="submit">Apply Analytics Filters</button>
+                </form>
+                <div class="summary-chip">Matching complaints: {{ analytics_filtered_count }}</div>
+            </article>
+
+            <article class="panel panel-nested">
                 <p class="eyebrow">Performance Analytics</p>
                 <h2>Complaints by category</h2>
                 {% if analytics_category_chart %}

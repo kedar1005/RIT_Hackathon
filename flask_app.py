@@ -2,6 +2,7 @@ import hashlib
 import json
 import os
 import re
+from collections import Counter
 from datetime import datetime
 from functools import wraps
 from io import BytesIO
@@ -206,6 +207,109 @@ def _paginate_items(items, page):
         "prev_page": current_page - 1,
         "next_page": current_page + 1,
     }
+
+
+def _parse_iso_date(value):
+    if not value:
+        return None
+    try:
+        return datetime.strptime(value, "%Y-%m-%d").date()
+    except ValueError:
+        return None
+
+
+def _filter_analytics_complaints(complaints, date_from=None, date_to=None, department_filter="All", priority_filter="All"):
+    filtered = []
+    start_date = _parse_iso_date(date_from)
+    end_date = _parse_iso_date(date_to)
+
+    for complaint in complaints:
+        if department_filter != "All" and (complaint.get("department") or "") != department_filter:
+            continue
+        if priority_filter != "All" and (complaint.get("ai_urgency") or "") != priority_filter:
+            continue
+
+        created_at = complaint.get("created_at")
+        created_date = None
+        if created_at:
+            try:
+                created_date = datetime.fromisoformat(str(created_at)).date()
+            except Exception:
+                created_date = None
+
+        if start_date and (created_date is None or created_date < start_date):
+            continue
+        if end_date and (created_date is None or created_date > end_date):
+            continue
+        filtered.append(complaint)
+
+    return filtered
+
+
+def _build_filtered_stats(complaints):
+    by_category_counter = Counter(complaint.get("category") or "Unknown" for complaint in complaints)
+    urgency_counter = Counter(complaint.get("ai_urgency") or "Medium" for complaint in complaints)
+
+    resolution_hours = []
+    for complaint in complaints:
+        created_at = complaint.get("created_at")
+        resolved_at = complaint.get("resolved_at")
+        if not created_at or not resolved_at:
+            continue
+        try:
+            created_dt = datetime.fromisoformat(str(created_at))
+            resolved_dt = datetime.fromisoformat(str(resolved_at))
+            resolution_hours.append(max((resolved_dt - created_dt).total_seconds() / 3600, 0))
+        except Exception:
+            continue
+
+    avg_resolution_hours = sum(resolution_hours) / len(resolution_hours) if resolution_hours else 0
+
+    return {
+        "by_category": [
+            {"category": category, "count": count}
+            for category, count in sorted(by_category_counter.items(), key=lambda item: item[1], reverse=True)
+        ],
+        "urgency_high": urgency_counter.get("High", 0),
+        "urgency_medium": urgency_counter.get("Medium", 0),
+        "urgency_low": urgency_counter.get("Low", 0),
+        "avg_resolution_hours": avg_resolution_hours,
+    }
+
+
+def _build_filtered_daily_trend(complaints):
+    trend_counter = Counter()
+    for complaint in complaints:
+        created_at = complaint.get("created_at")
+        if not created_at:
+            continue
+        try:
+            day = datetime.fromisoformat(str(created_at)).strftime("%Y-%m-%d")
+        except Exception:
+            continue
+        trend_counter[day] += 1
+
+    return [
+        {"day": day, "count": trend_counter[day]}
+        for day in sorted(trend_counter.keys())
+    ]
+
+
+def _build_filtered_leaderboard(complaints):
+    agent_names = {"AGT0001": "System Administrator"}
+    for worker in get_all_workers():
+        agent_names[worker.get("agent_id")] = worker.get("name") or worker.get("agent_id")
+
+    resolved_counter = Counter()
+    for complaint in complaints:
+        agent_id = complaint.get("assigned_agent")
+        if agent_id and complaint.get("status") == "Resolved":
+            resolved_counter[agent_id] += 1
+
+    return [
+        {"name": agent_names.get(agent_id, agent_id), "agent_id": agent_id, "total_resolved": count}
+        for agent_id, count in resolved_counter.most_common()
+    ]
 
 
 def login_required(role=None):
@@ -414,7 +518,7 @@ def worker_login():
 
     return render_template(
         "auth.html",
-        page_title="Worker Login",
+        page_title="Employee Login",
         page_subtitle="Access department complaints and update work progress.",
         form_type="worker_login",
     )
@@ -571,6 +675,10 @@ def admin_dashboard():
     city_filter = request.args.get("city", "All")
     date_from = request.args.get("date_from", "").strip() or None
     date_to = request.args.get("date_to", "").strip() or None
+    analytics_date_from = request.args.get("analytics_date_from", "").strip() or None
+    analytics_date_to = request.args.get("analytics_date_to", "").strip() or None
+    analytics_department = request.args.get("analytics_department", "All")
+    analytics_priority = request.args.get("analytics_priority", "All")
     page = request.args.get("page", default=1, type=int)
     unread_admin = get_unread_count_admin()
 
@@ -591,10 +699,20 @@ def admin_dashboard():
         mark_tickets_read_admin()
 
     stats = get_complaint_stats()
-    daily_trend = get_daily_trend(30)
-    leaderboard = get_agent_leaderboard()
-    avg_resolution_hours = stats.get("avg_resolution_hours", 0)
+    all_complaints = get_all_complaints()
+    analytics_complaints = _filter_analytics_complaints(
+        all_complaints,
+        date_from=analytics_date_from,
+        date_to=analytics_date_to,
+        department_filter=analytics_department,
+        priority_filter=analytics_priority,
+    )
+    analytics_stats = _build_filtered_stats(analytics_complaints)
+    daily_trend = _build_filtered_daily_trend(analytics_complaints)
+    leaderboard = _build_filtered_leaderboard(analytics_complaints)
+    avg_resolution_hours = analytics_stats.get("avg_resolution_hours", 0)
     avg_resolution_display = f"{avg_resolution_hours/24:.1f}d" if avg_resolution_hours > 24 else f"{avg_resolution_hours:.0f}h"
+    analytics_departments = sorted({complaint.get("department") for complaint in all_complaints if complaint.get("department")})
 
     return render_template(
         "admin_dashboard.html",
@@ -623,12 +741,18 @@ def admin_dashboard():
         model_versions=list(reversed(get_model_versions())),
         recent_corrections=get_all_corrections()[:12],
         pagination=pagination,
-        analytics_category_chart=_figure_html(get_category_distribution_chart(stats.get("by_category", []))) if stats.get("by_category") else None,
+        analytics_date_from=analytics_date_from or "",
+        analytics_date_to=analytics_date_to or "",
+        analytics_department=analytics_department,
+        analytics_priority=analytics_priority,
+        analytics_departments=analytics_departments,
+        analytics_filtered_count=len(analytics_complaints),
+        analytics_category_chart=_figure_html(get_category_distribution_chart(analytics_stats.get("by_category", []))) if analytics_stats.get("by_category") else None,
         analytics_urgency_chart=_figure_html(
             get_urgency_donut(
-                stats.get("urgency_high", 0),
-                stats.get("urgency_medium", 0),
-                stats.get("urgency_low", 0),
+                analytics_stats.get("urgency_high", 0),
+                analytics_stats.get("urgency_medium", 0),
+                analytics_stats.get("urgency_low", 0),
             )
         ),
         analytics_daily_chart=_figure_html(get_daily_trend_chart(daily_trend)) if daily_trend else None,

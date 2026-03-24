@@ -16,9 +16,9 @@
             {% if current_role == 'supervisor' %}
                 <a class="button button-primary" href="{{ url_for('supervisor_dashboard') }}">Supervisor Dashboard</a>
             {% elif current_role == 'worker' %}
-                <a class="button button-primary" href="{{ url_for('worker_dashboard') }}">Worker Dashboard</a>
+                <a class="button button-primary" href="{{ url_for('worker_dashboard') }}">Employee Dashboard</a>
             {% else %}
-                <a class="button button-secondary" href="{{ url_for('worker_login') }}">Worker/Supervisor Login</a>
+                <a class="button button-secondary" href="{{ url_for('worker_login') }}">Employee/Supervisor Login</a>
             {% endif %}
         </div>
     </div>
@@ -45,8 +45,98 @@
     </article>
     <article class="panel">
         <p class="eyebrow">Supervisor Portal</p>
-        <h3>Review pending workers and oversight</h3>
-        <p>Supervisors can review workers who have reached the warning limit and decide to restore or block their access.</p>
+        <h3>Review pending employees and oversight</h3>
+        <p>Supervisors can review employees who have reached the warning limit and decide to restore or block their access.</p>
     </article>
+</section>
+
+<section class="panel landing-image-panel">
+    <p class="eyebrow">AI Complaints</p>
+    <h2>Social betterment through guided civic reporting</h2>
+    <img
+        class="landing-feature-image"
+        src="{{ url_for('static', filename='images/index-ai-complaints.png') }}"
+        alt="AI complaints for societal betterment illustration"
+    >
+</section>
+
+<section class="panel home-feature-section">
+    <div class="home-feature-header">
+        <p class="eyebrow">Platform Features</p>
+        <h2>Everything you need to run civic complaint resolution</h2>
+    </div>
+
+    <div class="home-feature-grid">
+        <article class="home-feature-card">
+            <div class="home-feature-icon">AI</div>
+            <div>
+                <h3>AI Classification</h3>
+                <p>Automatically predicts complaint category, urgency, and expected resolution time from citizen input.</p>
+            </div>
+        </article>
+        <article class="home-feature-card">
+            <div class="home-feature-icon">MP</div>
+            <div>
+                <h3>City Intelligence Map</h3>
+                <p>Visualize complaints on a live city map with filters for city and date-based complaint activity.</p>
+            </div>
+        </article>
+        <article class="home-feature-card">
+            <div class="home-feature-icon">TK</div>
+            <div>
+                <h3>Ticket Inbox</h3>
+                <p>Citizens, admins, supervisors, and employees can track updates and follow-up requests in one flow.</p>
+            </div>
+        </article>
+        <article class="home-feature-card">
+            <div class="home-feature-icon">AN</div>
+            <div>
+                <h3>Analytics Dashboard</h3>
+                <p>Explore category, urgency, trend, and performance charts with filters for date, department, and priority.</p>
+            </div>
+        </article>
+        <article class="home-feature-card">
+            <div class="home-feature-icon">RL</div>
+            <div>
+                <h3>Role-Based Access</h3>
+                <p>Separate citizen, admin, supervisor, and employee experiences keep every user focused on their work.</p>
+            </div>
+        </article>
+        <article class="home-feature-card">
+            <div class="home-feature-icon">AS</div>
+            <div>
+                <h3>Smart Assignment</h3>
+                <p>Complaints are routed to the right department and can be assigned or reassigned for faster action.</p>
+            </div>
+        </article>
+        <article class="home-feature-card">
+            <div class="home-feature-icon">PR</div>
+            <div>
+                <h3>Proof and Image Tracking</h3>
+                <p>Citizen uploads and resolution proof images stay attached to complaints for transparent verification.</p>
+            </div>
+        </article>
+        <article class="home-feature-card">
+            <div class="home-feature-icon">EX</div>
+            <div>
+                <h3>Export Reports</h3>
+                <p>Download complaint data in CSV, PDF, Word, or JSON formats using structured tabular reports.</p>
+            </div>
+        </article>
+        <article class="home-feature-card">
+            <div class="home-feature-icon">FB</div>
+            <div>
+                <h3>Feedback Loop</h3>
+                <p>Citizens can rate resolved complaints, and admins can feed corrected labels back into the AI workflow.</p>
+            </div>
+        </article>
+        <article class="home-feature-card">
+            <div class="home-feature-icon">RV</div>
+            <div>
+                <h3>Supervisor Review</h3>
+                <p>Supervisors can review flagged employees, restore access, or block accounts after repeated warnings.</p>
+            </div>
+        </article>
+    </div>
 </section>
 {% endblock %}

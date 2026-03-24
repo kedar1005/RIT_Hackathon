@@ -46,7 +46,7 @@
                         <a class="dept-card" href="{{ url_for('supervisor_dashboard', dept=department) }}">
                             <div class="dept-icon">{{ department[:1] }}</div>
                             <h3>{{ department }}</h3>
-                            <p class="muted">Open complaint queue and worker assignments</p>
+                            <p class="muted">Open complaint queue and employee assignments</p>
                         </a>
                     {% endfor %}
                 </div>
@@ -130,7 +130,7 @@
                                 <form method="post" action="{{ url_for('supervisor_assign_worker', complaint_id=complaint.id) }}" class="inline-form inline-form-wide top-space">
                                     <input type="hidden" name="dept" value="{{ selected_dept }}">
                                     <select name="worker_id" required>
-                                        <option value="">Assign to Worker...</option>
+                                        <option value="">Assign to Employee...</option>
                                         {% for worker in dept_workers %}
                                             <option value="{{ worker.agent_id }}" {% if complaint.assigned_agent == worker.agent_id %}selected{% endif %}>
                                                 {{ worker.name }} ({{ worker.agent_id }})
@@ -168,7 +168,7 @@
     <section class="tab-pane" data-tab-panel="supervisor-reviews">
         <div class="panel panel-nested">
             <p class="eyebrow">Supervisor Review</p>
-            <h2>Pending worker reviews</h2>
+            <h2>Pending employee reviews</h2>
             <div class="stack compact-stack top-space">
                 {% for worker in pending_workers %}
                     <article class="complaint-card review-card">
@@ -193,7 +193,7 @@
                         </div>
                     </article>
                 {% else %}
-                    <p class="muted">No workers currently under review.</p>
+                    <p class="muted">No employees currently under review.</p>
                 {% endfor %}
             </div>
         </div>

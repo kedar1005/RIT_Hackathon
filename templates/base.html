@@ -29,11 +29,11 @@
                 {% elif current_role == 'supervisor' %}
                     <a href="{{ url_for('supervisor_dashboard') }}">Supervisor Dashboard</a>
                 {% elif current_role == 'worker' %}
-                    <a href="{{ url_for('worker_dashboard') }}">Worker Dashboard</a>
+                    <a href="{{ url_for('worker_dashboard') }}">Employee Dashboard</a>
                 {% else %}
                     <a href="{{ url_for('citizen_login') }}">Citizen</a>
                     <a href="{{ url_for('admin_login') }}">Admin</a>
-                    <a href="{{ url_for('worker_login') }}">Worker</a>
+                    <a href="{{ url_for('worker_login') }}">Employee</a>
                 {% endif %}
 
                 {% if current_user %}
@@ -64,7 +64,7 @@
                     {% elif current_role == 'supervisor' %}
                         Supervisor (Review Authority)
                     {% elif current_role == 'worker' %}
-                        Department Worker
+                        Department Employee
                     {% else %}
                         Citizen Portal
                     {% endif %}
