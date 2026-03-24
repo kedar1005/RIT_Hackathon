@@ -8,12 +8,11 @@
         <p class="eyebrow">Oversight & Review</p>
         <h1>{{ selected_dept if selected_dept else "Supervisor Control Center" }}</h1>
     </div>
-    {% if selected_dept and g.is_admin %}
-        <a href="{{ url_for('supervisor_dashboard') }}" class="button button-secondary">← Back to Departments</a>
+    {% if selected_dept and is_admin_view %}
+        <a href="{{ url_for('supervisor_dashboard') }}" class="button button-secondary">Back to Departments</a>
     {% endif %}
 </section>
 
-<!-- Metrics Summary -->
 <section class="card-grid card-grid-4 top-space">
     <article class="metric-card"><span>Total</span><strong>{{ stats.total }}</strong></article>
     <article class="metric-card"><span>Pending</span><strong>{{ stats.pending }}</strong></article>
@@ -21,13 +20,39 @@
     <article class="metric-card"><span>Resolved</span><strong>{{ stats.resolved }}</strong></article>
 </section>
 
-<section class="dashboard-grid">
-    <div class="main-content">
-        <!-- Filterable Complaint List for Supervisor's Department -->
-            <!-- Filterable Complaint List for Selected Department -->
-            <article class="panel">
+<section class="panel tab-shell top-space">
+    <div class="tab-header">
+        <div>
+            <p class="eyebrow">Supervisor Workspace</p>
+            <h2>Fast navigation with less scrolling</h2>
+        </div>
+        <div class="tab-nav" data-tab-group="supervisor">
+            <button type="button" class="tab-button is-active" data-tab-target="supervisor-queue">
+                {{ 'Departments & Queue' if is_admin_view else 'Queue' }}
+            </button>
+            <button type="button" class="tab-button" data-tab-target="supervisor-reviews">
+                Pending Reviews{% if pending_workers %} ({{ pending_workers|length }}){% endif %}
+            </button>
+        </div>
+    </div>
+
+    <section class="tab-pane is-active" data-tab-panel="supervisor-queue">
+        <div class="panel panel-nested">
+            {% if is_admin_view and not selected_dept %}
+                <p class="eyebrow">Departments</p>
+                <h2>Select a department to review complaints</h2>
+                <div class="dept-grid">
+                    {% for department in departments %}
+                        <a class="dept-card" href="{{ url_for('supervisor_dashboard', dept=department) }}">
+                            <div class="dept-icon">{{ department[:1] }}</div>
+                            <h3>{{ department }}</h3>
+                            <p class="muted">Open complaint queue and worker assignments</p>
+                        </a>
+                    {% endfor %}
+                </div>
+            {% else %}
                 <p class="eyebrow">{{ selected_dept }} Queue</p>
-                <h2>Search and monitoring</h2>
+                <h2>Search, monitor, and assign complaints</h2>
                 <form method="get" class="filter-grid">
                     <input type="hidden" name="dept" value="{{ selected_dept }}">
                     <input type="text" name="term" placeholder="Search complaints" value="{{ search_term }}">
@@ -51,83 +76,99 @@
 
                 <div class="complaint-list">
                     {% for complaint in complaints %}
-                        <article class="complaint-card">
-                            <div class="complaint-head">
+                        <details class="complaint-card complaint-toggle">
+                            <summary class="complaint-summary">
                                 <div>
                                     <strong>#CMP-{{ "%04d"|format(complaint.id) }}</strong>
                                     <h3>{{ complaint.category }}</h3>
+                                    <small>{{ complaint.address }} • {{ complaint.created_at }}</small>
                                 </div>
-                                <div class="pill-row">
-                                    <span class="pill">{{ complaint.status }}</span>
-                                    <span class="pill pill-{{ complaint.ai_urgency|lower }}">{{ complaint.ai_urgency }}</span>
+                                <div class="summary-side">
+                                    <div class="pill-row">
+                                        <span class="pill">{{ complaint.status }}</span>
+                                        <span class="pill pill-{{ complaint.ai_urgency|lower }}">{{ complaint.ai_urgency }}</span>
+                                    </div>
+                                    <span class="arrow-indicator">▾</span>
                                 </div>
-                            </div>
-                            <p>{{ complaint.description }}</p>
-                            <small>{{ complaint.address }} • {{ complaint.created_at }}</small>
-                            
-                            {% if complaint.completion_image %}
-                                <div class="completion-proof top-space">
-                                    <p class="eyebrow" style="margin-bottom: 0.5rem; color: #10b981;">✅ Completion Proof</p>
-                                    <img src="{{ url_for('static', filename=complaint.completion_image.replace('assets/', '')) }}" alt="Work Completion Proof" style="width: 100%; border-radius: 12px; border: 1px solid #10b981;">
-                                </div>
-                            {% endif %}
-                            
-                            <form method="post" action="{{ url_for('admin_update_complaint', complaint_id=complaint.id) }}" class="inline-form inline-form-wide">
-                                <select name="status" required>
-                                    {% for option in ['Pending', 'In Progress', 'Resolved'] %}
-                                        <option value="{{ option }}" {% if option == complaint.status %}selected{% endif %}>{{ option }}</option>
-                                    {% endfor %}
-                                </select>
-                                <input type="text" name="notes" placeholder="Resolution notes">
-                                <button class="button button-secondary" type="submit">Save Status</button>
-                            </form>
+                            </summary>
 
-                            <form method="post" action="{{ url_for('supervisor_assign_worker', complaint_id=complaint.id) }}" class="inline-form inline-form-wide top-space">
-                                <input type="hidden" name="dept" value="{{ selected_dept }}">
-                                <select name="worker_id" required>
-                                    <option value="">Assign to Worker...</option>
-                                    {% for worker in dept_workers %}
-                                        <option value="{{ worker.agent_id }}" {% if complaint.assigned_agent == worker.agent_id %}selected{% endif %}>
-                                            {{ worker.name }} ({{ worker.agent_id }})
-                                        </option>
-                                    {% endfor %}
-                                </select>
-                                <span></span>
-                                <button class="button button-primary" type="submit">
-                                    {{ 'Re-assign' if complaint.assigned_agent else 'Assign' }}
-                                </button>
-                            </form>
-                        </article>
+                            <div class="complaint-expanded">
+                                <p>{{ complaint.description }}</p>
+                                <div class="detail-grid">
+                                    <div>
+                                        <span class="detail-label">Department</span>
+                                        <strong>{{ complaint.department }}</strong>
+                                    </div>
+                                    <div>
+                                        <span class="detail-label">Assigned Agent</span>
+                                        <strong>{{ complaint.assigned_agent or 'Unassigned' }}</strong>
+                                    </div>
+                                    <div>
+                                        <span class="detail-label">Created</span>
+                                        <strong>{{ complaint.created_at }}</strong>
+                                    </div>
+                                </div>
+
+                                {% if complaint.completion_image %}
+                                    <div class="proof-block">
+                                        <span class="detail-label">Completion Proof</span>
+                                        <img src="{{ url_for('static', filename=complaint.completion_image.replace('assets/', '')) }}" alt="Work completion proof">
+                                    </div>
+                                {% endif %}
+
+                                <form method="post" action="{{ url_for('admin_update_complaint', complaint_id=complaint.id) }}" class="inline-form inline-form-wide">
+                                    <select name="status" required>
+                                        {% for option in ['Pending', 'In Progress', 'Resolved'] %}
+                                            <option value="{{ option }}" {% if option == complaint.status %}selected{% endif %}>{{ option }}</option>
+                                        {% endfor %}
+                                    </select>
+                                    <input type="text" name="notes" placeholder="Resolution notes">
+                                    <div></div>
+                                    <button class="button button-secondary" type="submit">Save Status</button>
+                                </form>
+
+                                <form method="post" action="{{ url_for('supervisor_assign_worker', complaint_id=complaint.id) }}" class="inline-form inline-form-wide top-space">
+                                    <input type="hidden" name="dept" value="{{ selected_dept }}">
+                                    <select name="worker_id" required>
+                                        <option value="">Assign to Worker...</option>
+                                        {% for worker in dept_workers %}
+                                            <option value="{{ worker.agent_id }}" {% if complaint.assigned_agent == worker.agent_id %}selected{% endif %}>
+                                                {{ worker.name }} ({{ worker.agent_id }})
+                                            </option>
+                                        {% endfor %}
+                                    </select>
+                                    <div></div>
+                                    <div></div>
+                                    <button class="button button-primary" type="submit">
+                                        {{ 'Re-assign' if complaint.assigned_agent else 'Assign' }}
+                                    </button>
+                                </form>
+                            </div>
+                        </details>
                     {% else %}
                         <p class="muted">No complaints found for this department.</p>
                     {% endfor %}
                 </div>
 
                 {% if total_pages > 1 %}
-                    <div class="pagination top-space">
+                    <div class="pagination">
                         {% if current_page > 1 %}
-                            <a href="{{ url_for('supervisor_dashboard', dept=selected_dept, page=current_page-1, term=search_term, status=selected_status, urgency=selected_urgency, category=selected_category) }}" class="button button-secondary">← Previous</a>
-                        {% else %}
-                            <span></span>
+                            <a href="{{ url_for('supervisor_dashboard', dept=selected_dept, page=current_page-1, term=search_term, status=selected_status, urgency=selected_urgency, category=selected_category) }}" class="button button-secondary">Previous</a>
                         {% endif %}
-                        
-                        <span class="pagination-info">Page <strong>{{ current_page }}</strong> of {{ total_pages }}</span>
-                        
+                        <span class="summary-chip">Page {{ current_page }} of {{ total_pages }}</span>
                         {% if current_page < total_pages %}
-                            <a href="{{ url_for('supervisor_dashboard', dept=selected_dept, page=current_page+1, term=search_term, status=selected_status, urgency=selected_urgency, category=selected_category) }}" class="button button-secondary">Next →</a>
-                        {% else %}
-                            <span></span>
+                            <a href="{{ url_for('supervisor_dashboard', dept=selected_dept, page=current_page+1, term=search_term, status=selected_status, urgency=selected_urgency, category=selected_category) }}" class="button button-secondary">Next</a>
                         {% endif %}
                     </div>
                 {% endif %}
-            </article>
-    </div>
+            {% endif %}
+        </div>
+    </section>
 
-    <!-- Side Panel: Pending Reviews (Always Visible) -->
-    <aside class="side-content">
-        <article class="panel">
+    <section class="tab-pane" data-tab-panel="supervisor-reviews">
+        <div class="panel panel-nested">
             <p class="eyebrow">Supervisor Review</p>
-            <h2>Pending Worker Reviews</h2>
+            <h2>Pending worker reviews</h2>
             <div class="stack compact-stack top-space">
                 {% for worker in pending_workers %}
                     <article class="complaint-card review-card">
@@ -137,91 +178,25 @@
                                 <h3>{{ worker.name }}</h3>
                             </div>
                             <div class="pill-row">
-                                <span class="pill pill-warning">PENDING</span>
+                                <span class="pill pill-warning">Pending</span>
                             </div>
                         </div>
                         <p>{{ worker.department }}</p>
                         <small>Warnings: {{ worker.warning_count }}</small>
                         <div class="button-row top-space">
-                            <form method="post" action="{{ url_for('supervisor_restore', agent_id=worker.agent_id) }}" style="display:inline;">
+                            <form method="post" action="{{ url_for('supervisor_restore', agent_id=worker.agent_id) }}">
                                 <button class="button button-success" type="submit">Restore</button>
                             </form>
-                            <form method="post" action="{{ url_for('supervisor_block', agent_id=worker.agent_id) }}" style="display:inline;">
+                            <form method="post" action="{{ url_for('supervisor_block', agent_id=worker.agent_id) }}">
                                 <button class="button button-danger" type="submit">Block</button>
                             </form>
                         </div>
                     </article>
                 {% else %}
-                    <div class="empty-state">
-                        <p class="muted">No workers currently under review.</p>
-                    </div>
+                    <p class="muted">No workers currently under review.</p>
                 {% endfor %}
             </div>
-        </article>
-    </aside>
+        </div>
+    </section>
 </section>
-
-<style>
-    .dashboard-header {
-        display: flex;
-        justify-content: space-between;
-        align-items: flex-end;
-        margin-top: 1rem;
-    }
-    .dept-grid {
-        display: grid;
-        grid-template-columns: repeat(2, 1fr);
-        gap: 1.5rem;
-        margin-top: 1.5rem;
-    }
-    .dept-card {
-        background: rgba(255, 255, 255, 0.4);
-        border: 1px solid rgba(255, 255, 255, 0.6);
-        padding: 2rem;
-        border-radius: 20px;
-        text-align: center;
-        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-        cursor: pointer;
-        display: block;
-    }
-    .dept-card:hover {
-        background: rgba(255, 255, 255, 0.8);
-        transform: translateY(-5px);
-        box-shadow: 0 20px 40px rgba(0,0,0,0.05);
-        border-color: var(--primary);
-    }
-    .dept-icon {
-        width: 60px;
-        height: 60px;
-        margin: 0 auto 1.5rem;
-        background: linear-gradient(135deg, var(--primary), var(--accent));
-        color: white;
-        border-radius: 16px;
-        display: grid;
-        place-items: center;
-        font-size: 1.8rem;
-        font-weight: 800;
-        box-shadow: 0 10px 20px rgba(15, 118, 110, 0.2);
-    }
-    .dept-card h3 { margin: 0 0 0.5rem; color: var(--text); }
-    
-    .pagination {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        padding-top: 1.5rem;
-        border-top: 1px solid var(--line);
-    }
-    .pagination-info { font-weight: 700; color: var(--muted); }
-    
-    .button-success { background: #10b981; color: white; }
-    .button-danger { background: #ef4444; color: white; }
-    .pill-warning { background: #f59e0b; color: white; }
-    .top-space { margin-top: 1.5rem; }
-    .review-card { border-left: 4px solid #f59e0b; }
-    
-    @media (max-width: 768px) {
-        .dept-grid { grid-template-columns: 1fr; }
-    }
-</style>
 {% endblock %}

@@ -3,235 +3,267 @@
 {% block title %}Citizen Dashboard{% endblock %}
 
 {% block content %}
-<section class="dashboard-grid dashboard-grid-wide">
-    <article class="panel">
-        <p class="eyebrow">Submit Complaint</p>
-        <h2>Report a civic issue</h2>
-        <form method="post" enctype="multipart/form-data" class="form-grid">
-            <label>
-                <span>Category</span>
-                <select name="category" required>
-                    {% for category in categories %}
-                        <option value="{{ category }}">{{ category }}</option>
-                    {% endfor %}
-                </select>
-            </label>
-            <label>
-                <span>Your urgency</span>
-                <select name="user_urgency" required>
-                    {% for urgency in urgencies %}
-                        <option value="{{ urgency }}" {% if urgency == 'Medium' %}selected{% endif %}>{{ urgency }}</option>
-                    {% endfor %}
-                </select>
-            </label>
-            <label class="full-span">
-                <span>Address</span>
-                <input type="text" name="address" placeholder="MG Road, near City Hospital" required>
-            </label>
-            <label class="full-span">
-                <span>Nearest landmark</span>
-                <input type="text" name="landmark" placeholder="Opposite SBI Bank">
-            </label>
-            <label class="full-span">
-                <span>Description</span>
-                <textarea name="description" rows="5" placeholder="Describe the issue clearly" required></textarea>
-            </label>
-            <label class="full-span">
-                <span>Photo</span>
-                <input type="file" name="image" accept="image/*" capture="environment">
-            </label>
-            <button class="button button-primary full-span" type="submit">Submit with AI Analysis</button>
-        </form>
-    </article>
-
-    <article class="panel">
-        <p class="eyebrow">Inbox</p>
-        <h2>Updates and tickets</h2>
-        <div class="stack compact-stack">
-            <div class="summary-chip">Unread updates: {{ unread_tickets }}</div>
-            {% if tickets %}
-                {% for ticket in tickets %}
-                    <div class="ticket-card">
-                        <strong>Complaint #CMP-{{ "%04d"|format(ticket.complaint_id) }}</strong>
-                        <p>{{ ticket.message }}</p>
-                        {% if ticket.completion_image %}
-                            <div class="completion-proof" style="margin-top: 0.8rem;">
-                                <img src="{{ url_for('static', filename=ticket.completion_image.replace('assets/', '')) }}" alt="Work Completion Proof" style="width: 100%; border-radius: 8px; border: 1px solid var(--line);">
-                            </div>
-                        {% endif %}
-                        <small>{{ ticket.department }} • {{ ticket.created_at }}</small>
-                    </div>
-                {% endfor %}
-            {% else %}
-                <p class="muted">No ticket messages yet.</p>
-            {% endif %}
-        </div>
-    </article>
+<section class="card-grid card-grid-4">
+    <article class="metric-card"><span>Total Filed</span><strong>{{ complaint_stats.total }}</strong></article>
+    <article class="metric-card"><span>Pending</span><strong>{{ complaint_stats.pending }}</strong></article>
+    <article class="metric-card"><span>In Progress</span><strong>{{ complaint_stats.in_progress }}</strong></article>
+    <article class="metric-card"><span>Resolved</span><strong>{{ complaint_stats.resolved }}</strong></article>
 </section>
 
-<section class="panel">
-    <p class="eyebrow">My Complaints</p>
-    <h2>Track submitted issues</h2>
-    <section class="card-grid card-grid-4">
-        <article class="metric-card"><span>Total Filed</span><strong>{{ complaint_stats.total }}</strong></article>
-        <article class="metric-card"><span>Pending</span><strong>{{ complaint_stats.pending }}</strong></article>
-        <article class="metric-card"><span>In Progress</span><strong>{{ complaint_stats.in_progress }}</strong></article>
-        <article class="metric-card"><span>Resolved</span><strong>{{ complaint_stats.resolved }}</strong></article>
-    </section>
-
-    <form method="get" class="filter-grid top-space">
-        <input type="text" name="term" placeholder="Search your complaints" value="{{ search_term }}">
-        <select name="status">
-            {% for option in ['All', 'Pending', 'In Progress', 'Resolved'] %}
-                <option value="{{ option }}" {% if option == selected_status %}selected{% endif %}>{{ option }}</option>
-            {% endfor %}
-        </select>
-        <select name="urgency">
-            {% for option in ['All', 'High', 'Medium', 'Low'] %}
-                <option value="{{ option }}" {% if option == selected_urgency %}selected{% endif %}>{{ option }}</option>
-            {% endfor %}
-        </select>
-        <div></div>
-        <button class="button button-secondary" type="submit">Apply Filters</button>
-    </form>
-
-    <div class="complaint-list">
-        {% if complaints %}
-            {% for complaint in complaints %}
-                {% set detail = complaint_details.get(complaint.id, complaint) %}
-                <details class="complaint-card complaint-toggle">
-                    <summary class="complaint-summary">
-                        <div>
-                            <strong>#CMP-{{ "%04d"|format(complaint.id) }}</strong>
-                            <h3>{{ complaint.category }}</h3>
-                            <small>{{ complaint.address }} • {{ complaint.created_at }}</small>
-                        </div>
-                        <div class="summary-side">
-                            <div class="pill-row">
-                                <span class="pill">{{ complaint.status }}</span>
-                                <span class="pill pill-{{ complaint.ai_urgency|lower }}">{{ complaint.ai_urgency }}</span>
-                            </div>
-                            <span class="arrow-indicator">▾</span>
-                        </div>
-                    </summary>
-
-                    <div class="complaint-expanded">
-                        <p>{{ complaint.description }}</p>
-
-                        <div class="detail-grid">
-                            <div>
-                                <span class="detail-label">Department</span>
-                                <strong>{{ complaint.department }}</strong>
-                            </div>
-                            <div>
-                                <span class="detail-label">AI Method</span>
-                                <strong>{{ complaint.ai_method }}</strong>
-                            </div>
-                            <div>
-                                <span class="detail-label">Estimated Resolution</span>
-                                <strong>{{ complaint.estimated_resolution or 'Pending assessment' }}</strong>
-                            </div>
-                        </div>
-
-                        <div class="detail-grid">
-                            <div>
-                                <span class="detail-label">AI Confidence</span>
-                                <strong>{{ (detail.ai_confidence * 100)|round|int if detail.ai_confidence is not none else 0 }}%</strong>
-                            </div>
-                            <div>
-                                <span class="detail-label">Landmark</span>
-                                <strong>{{ detail.landmark or 'Not provided' }}</strong>
-                            </div>
-                            <div>
-                                <span class="detail-label">Assigned Agent</span>
-                                <strong>{{ detail.assigned_agent or 'Not assigned' }}</strong>
-                            </div>
-                        </div>
-
-                        {% if detail.complaint_image_url %}
-                            <div class="proof-block">
-                                <a class="button button-secondary" href="{{ detail.complaint_image_url }}" target="_blank">Preview Citizen Image</a>
-                                <img src="{{ detail.complaint_image_url }}" alt="Complaint image">
-                            </div>
-                        {% endif %}
-
-                        {% if detail.history %}
-                            <div class="timeline">
-                                {% for item in detail.history %}
-                                    <div class="timeline-item">
-                                        <strong>{{ item.new_status }}</strong>
-                                        <small>{{ item.changed_at }}</small>
-                                        <p>{{ item.change_reason or 'Status updated' }}</p>
-                                    </div>
-                                {% endfor %}
-                            </div>
-                        {% endif %}
-
-                        {% if detail.proof_url %}
-                            <div class="proof-block">
-                                <span class="detail-label">Resolution Proof</span>
-                                <img src="{{ detail.proof_url }}" alt="Resolution proof">
-                            </div>
-                        {% endif %}
-
-                        <div class="embedded-actions">
-                            <form method="post" action="{{ url_for('citizen_ticket', complaint_id=complaint.id) }}" class="inline-form">
-                                <input type="hidden" name="department" value="{{ complaint.department }}">
-                                <input type="text" name="message" placeholder="Need help on this complaint?">
-                                <button class="button button-secondary" type="submit">Raise Ticket</button>
-                            </form>
-
-                            {% if complaint.status == 'Resolved' %}
-                                <form method="post" action="{{ url_for('citizen_feedback', complaint_id=complaint.id) }}" class="inline-form">
-                                    <select name="rating" required>
-                                        <option value="">Rate service</option>
-                                        <option value="5">5</option>
-                                        <option value="4">4</option>
-                                        <option value="3">3</option>
-                                        <option value="2">2</option>
-                                        <option value="1">1</option>
-                                    </select>
-                                    <input type="text" name="comment" placeholder="Optional feedback">
-                                    <button class="button button-secondary" type="submit">Submit Feedback</button>
-                                </form>
-                            {% endif %}
-                        </div>
-                    </div>
-                </details>
-            {% endfor %}
-        {% else %}
-            <p class="muted">No complaints submitted yet.</p>
-        {% endif %}
+<section class="panel tab-shell top-space">
+    <div class="tab-header">
+        <div>
+            <p class="eyebrow">Citizen Workspace</p>
+            <h2>Fast navigation with less scrolling</h2>
+        </div>
+        <div class="tab-nav" data-tab-group="citizen">
+            <button type="button" class="tab-button is-active" data-tab-target="citizen-submit">Submit</button>
+            <button type="button" class="tab-button" data-tab-target="citizen-complaints">My Complaints</button>
+            <button type="button" class="tab-button" data-tab-target="citizen-inbox">
+                Inbox{% if unread_tickets %} ({{ unread_tickets }}){% endif %}
+            </button>
+            <button type="button" class="tab-button" data-tab-target="citizen-help">Help</button>
+        </div>
     </div>
 
-    {% if pagination.total_items > 5 %}
-        <div class="pagination">
-            {% if pagination.has_prev %}
-                <a class="button button-secondary" href="{{ url_for('citizen_dashboard', page=pagination.prev_page, term=search_term, status=selected_status, urgency=selected_urgency) }}">Previous</a>
-            {% endif %}
-            <span class="summary-chip">Page {{ pagination.page }} of {{ pagination.total_pages }}</span>
-            {% if pagination.has_next %}
-                <a class="button button-secondary" href="{{ url_for('citizen_dashboard', page=pagination.next_page, term=search_term, status=selected_status, urgency=selected_urgency) }}">Next</a>
+    <section class="tab-pane is-active" data-tab-panel="citizen-submit">
+        <div class="panel panel-nested">
+            <p class="eyebrow">Submit Complaint</p>
+            <h2>Report a civic issue</h2>
+            <form method="post" enctype="multipart/form-data" class="form-grid">
+                <label>
+                    <span>Category</span>
+                    <select name="category" required>
+                        {% for category in categories %}
+                            <option value="{{ category }}">{{ category }}</option>
+                        {% endfor %}
+                    </select>
+                </label>
+                <label>
+                    <span>Your urgency</span>
+                    <select name="user_urgency" required>
+                        {% for urgency in urgencies %}
+                            <option value="{{ urgency }}" {% if urgency == 'Medium' %}selected{% endif %}>{{ urgency }}</option>
+                        {% endfor %}
+                    </select>
+                </label>
+                <label class="full-span">
+                    <span>Address</span>
+                    <input type="text" name="address" placeholder="MG Road, near City Hospital" required>
+                </label>
+                <label class="full-span">
+                    <span>Nearest landmark</span>
+                    <input type="text" name="landmark" placeholder="Opposite SBI Bank">
+                </label>
+                <label class="full-span">
+                    <span>Description</span>
+                    <textarea name="description" rows="5" placeholder="Describe the issue clearly" required></textarea>
+                </label>
+                <label class="full-span">
+                    <span>Photo</span>
+                    <input type="file" name="image" accept="image/*" capture="environment">
+                </label>
+                <button class="button button-primary full-span" type="submit">Submit with AI Analysis</button>
+            </form>
+        </div>
+    </section>
+
+    <section class="tab-pane" data-tab-panel="citizen-complaints">
+        <div class="panel panel-nested">
+            <p class="eyebrow">My Complaints</p>
+            <h2>Track submitted issues</h2>
+
+            <form method="get" class="filter-grid top-space">
+                <input type="text" name="term" placeholder="Search your complaints" value="{{ search_term }}">
+                <select name="status">
+                    {% for option in ['All', 'Pending', 'In Progress', 'Resolved'] %}
+                        <option value="{{ option }}" {% if option == selected_status %}selected{% endif %}>{{ option }}</option>
+                    {% endfor %}
+                </select>
+                <select name="urgency">
+                    {% for option in ['All', 'High', 'Medium', 'Low'] %}
+                        <option value="{{ option }}" {% if option == selected_urgency %}selected{% endif %}>{{ option }}</option>
+                    {% endfor %}
+                </select>
+                <div></div>
+                <button class="button button-secondary" type="submit">Apply Filters</button>
+            </form>
+
+            <div class="complaint-list">
+                {% if complaints %}
+                    {% for complaint in complaints %}
+                        {% set detail = complaint_details.get(complaint.id, complaint) %}
+                        <details class="complaint-card complaint-toggle">
+                            <summary class="complaint-summary">
+                                <div>
+                                    <strong>#CMP-{{ "%04d"|format(complaint.id) }}</strong>
+                                    <h3>{{ complaint.category }}</h3>
+                                    <small>{{ complaint.address }} • {{ complaint.created_at }}</small>
+                                </div>
+                                <div class="summary-side">
+                                    <div class="pill-row">
+                                        <span class="pill">{{ complaint.status }}</span>
+                                        <span class="pill pill-{{ complaint.ai_urgency|lower }}">{{ complaint.ai_urgency }}</span>
+                                    </div>
+                                    <span class="arrow-indicator">▾</span>
+                                </div>
+                            </summary>
+
+                            <div class="complaint-expanded">
+                                <p>{{ complaint.description }}</p>
+
+                                <div class="detail-grid">
+                                    <div>
+                                        <span class="detail-label">Department</span>
+                                        <strong>{{ complaint.department }}</strong>
+                                    </div>
+                                    <div>
+                                        <span class="detail-label">AI Method</span>
+                                        <strong>{{ complaint.ai_method }}</strong>
+                                    </div>
+                                    <div>
+                                        <span class="detail-label">Estimated Resolution</span>
+                                        <strong>{{ complaint.estimated_resolution or 'Pending assessment' }}</strong>
+                                    </div>
+                                </div>
+
+                                <div class="detail-grid">
+                                    <div>
+                                        <span class="detail-label">AI Confidence</span>
+                                        <strong>{{ (detail.ai_confidence * 100)|round|int if detail.ai_confidence is not none else 0 }}%</strong>
+                                    </div>
+                                    <div>
+                                        <span class="detail-label">Landmark</span>
+                                        <strong>{{ detail.landmark or 'Not provided' }}</strong>
+                                    </div>
+                                    <div>
+                                        <span class="detail-label">Assigned Agent</span>
+                                        <strong>{{ detail.assigned_agent or 'Not assigned' }}</strong>
+                                    </div>
+                                </div>
+
+                                {% if detail.complaint_image_url %}
+                                    <div class="proof-block">
+                                        <a class="button button-secondary" href="{{ detail.complaint_image_url }}" target="_blank">Preview Citizen Image</a>
+                                        <img src="{{ detail.complaint_image_url }}" alt="Complaint image">
+                                    </div>
+                                {% endif %}
+
+                                {% if detail.history %}
+                                    <div class="timeline">
+                                        {% for item in detail.history %}
+                                            <div class="timeline-item">
+                                                <strong>{{ item.new_status }}</strong>
+                                                <small>{{ item.changed_at }}</small>
+                                                <p>{{ item.change_reason or 'Status updated' }}</p>
+                                            </div>
+                                        {% endfor %}
+                                    </div>
+                                {% endif %}
+
+                                {% if detail.proof_url %}
+                                    <div class="proof-block">
+                                        <span class="detail-label">Resolution Proof</span>
+                                        <img src="{{ detail.proof_url }}" alt="Resolution proof">
+                                    </div>
+                                {% endif %}
+
+                                <div class="embedded-actions">
+                                    <form method="post" action="{{ url_for('citizen_ticket', complaint_id=complaint.id) }}" class="inline-form">
+                                        <input type="hidden" name="department" value="{{ complaint.department }}">
+                                        <input type="text" name="message" placeholder="Need help on this complaint?">
+                                        <button class="button button-secondary" type="submit">Raise Ticket</button>
+                                    </form>
+
+                                    {% if complaint.status == 'Resolved' %}
+                                        <form method="post" action="{{ url_for('citizen_feedback', complaint_id=complaint.id) }}" class="inline-form">
+                                            <select name="rating" required>
+                                                <option value="">Rate service</option>
+                                                <option value="5">5</option>
+                                                <option value="4">4</option>
+                                                <option value="3">3</option>
+                                                <option value="2">2</option>
+                                                <option value="1">1</option>
+                                            </select>
+                                            <input type="text" name="comment" placeholder="Optional feedback">
+                                            <button class="button button-secondary" type="submit">Submit Feedback</button>
+                                        </form>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </details>
+                    {% endfor %}
+                {% else %}
+                    <p class="muted">No complaints submitted yet.</p>
+                {% endif %}
+            </div>
+
+            {% if pagination.total_items > 5 %}
+                <div class="pagination">
+                    {% if pagination.has_prev %}
+                        <a class="button button-secondary" href="{{ url_for('citizen_dashboard', page=pagination.prev_page, term=search_term, status=selected_status, urgency=selected_urgency) }}">Previous</a>
+                    {% endif %}
+                    <span class="summary-chip">Page {{ pagination.page }} of {{ pagination.total_pages }}</span>
+                    {% if pagination.has_next %}
+                        <a class="button button-secondary" href="{{ url_for('citizen_dashboard', page=pagination.next_page, term=search_term, status=selected_status, urgency=selected_urgency) }}">Next</a>
+                    {% endif %}
+                </div>
             {% endif %}
         </div>
-    {% endif %}
-</section>
+    </section>
 
-<section class="card-grid card-grid-3">
-    <article class="panel">
-        <p class="eyebrow">What You Can Report</p>
-        <h3>Eight complaint categories</h3>
-        <p>Roads, electricity, garbage, water, drainage, trees, traffic, and public safety issues can all be reported here.</p>
-    </article>
-    <article class="panel">
-        <p class="eyebrow">How AI Works</p>
-        <h3>Text and image models work together</h3>
-        <p>The system classifies category, predicts urgency, and estimates resolution time using the same Python models as the Streamlit app.</p>
-    </article>
-    <article class="panel">
-        <p class="eyebrow">Photo Tips</p>
-        <h3>Help the team act faster</h3>
-        <p>Use a clear photo, include nearby landmarks, and keep GPS enabled when possible for better location quality.</p>
-    </article>
+    <section class="tab-pane" data-tab-panel="citizen-inbox">
+        <div class="panel panel-nested">
+            <p class="eyebrow">Inbox</p>
+            <h2>Updates and tickets</h2>
+            <div class="summary-chip">Unread updates: {{ unread_tickets }}</div>
+            <div class="stack compact-stack admin-inbox-list top-space">
+                {% if tickets %}
+                    {% for ticket in tickets %}
+                        <article class="ticket-card admin-ticket-card">
+                            <div class="ticket-head">
+                                <div>
+                                    <strong>Complaint #CMP-{{ "%04d"|format(ticket.complaint_id) }}</strong>
+                                    <p>{{ ticket.message }}</p>
+                                </div>
+                                <div class="ticket-meta">
+                                    <span class="pill">{{ ticket.department or 'General' }}</span>
+                                    <small>{{ ticket.created_at }}</small>
+                                </div>
+                            </div>
+                            {% if ticket.proof_url %}
+                                <div class="proof-block">
+                                    <span class="detail-label">Resolution Proof</span>
+                                    <img src="{{ ticket.proof_url }}" alt="Resolution proof">
+                                </div>
+                            {% endif %}
+                        </article>
+                    {% endfor %}
+                {% else %}
+                    <p class="muted">No ticket messages yet.</p>
+                {% endif %}
+            </div>
+        </div>
+    </section>
+
+    <section class="tab-pane" data-tab-panel="citizen-help">
+        <div class="card-grid card-grid-3">
+            <article class="panel panel-nested">
+                <p class="eyebrow">What You Can Report</p>
+                <h3>Eight complaint categories</h3>
+                <p>Roads, electricity, garbage, water, drainage, trees, traffic, and public safety issues can all be reported here.</p>
+            </article>
+            <article class="panel panel-nested">
+                <p class="eyebrow">How AI Works</p>
+                <h3>Text and image models work together</h3>
+                <p>The system classifies category, predicts urgency, and estimates resolution time using the same Python models as the Streamlit app.</p>
+            </article>
+            <article class="panel panel-nested">
+                <p class="eyebrow">Photo Tips</p>
+                <h3>Help the team act faster</h3>
+                <p>Use a clear photo, include nearby landmarks, and keep GPS enabled when possible for better location quality.</p>
+            </article>
+        </div>
+    </section>
 </section>
 {% endblock %}
