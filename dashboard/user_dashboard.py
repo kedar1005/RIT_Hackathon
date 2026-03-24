@@ -14,7 +14,7 @@ from utils.ui_utils import (
 )
 from utils.data_utils import (
     add_complaint, get_user_complaints, get_complaint_by_id,
-    check_duplicate, add_feedback
+    check_duplicate, add_feedback, add_ticket
 )
 from utils.geo_utils import (
     extract_gps_from_image, geocode_address, get_image_hash,
@@ -349,6 +349,40 @@ def show_user_dashboard():
                                     styled_success("Thank you for your feedback!")
                                 else:
                                     styled_error("Could not save feedback")
+
+                        # ── Ticket Raising (for unresolved complaints) ──
+                        if c['status'] != 'Resolved':
+                            st.markdown("---")
+                            ticket_key = f"show_ticket_{c['id']}"
+                            if ticket_key not in st.session_state:
+                                st.session_state[ticket_key] = False
+
+                            if st.button("🎫 Raise Ticket", key=f"btn_ticket_{c['id']}"):
+                                st.session_state[ticket_key] = True
+
+                            if st.session_state[ticket_key]:
+                                ticket_msg = st.text_area(
+                                    "Describe your issue",
+                                    placeholder="e.g., No action taken for 5 days...",
+                                    key=f"ticket_msg_{c['id']}"
+                                )
+                                if st.button("📬 Send Message", key=f"send_ticket_{c['id']}"):
+                                    if not ticket_msg or not ticket_msg.strip():
+                                        styled_error("Message cannot be empty.")
+                                    else:
+                                        dept = c.get('department') or 'General'
+                                        tid = add_ticket(
+                                            complaint_id=c['id'],
+                                            user_id=user_id,
+                                            message=ticket_msg.strip(),
+                                            department=dept
+                                        )
+                                        if tid:
+                                            styled_success("✅ Ticket raised successfully! Admin/Worker will review it.")
+                                            st.session_state[ticket_key] = False
+                                            st.rerun()
+                                        else:
+                                            styled_error("Failed to raise ticket. Please try again.")
 
     # ─── TAB 3: HELP & GUIDELINES ──────────────────────────────────────
     with tab_help:

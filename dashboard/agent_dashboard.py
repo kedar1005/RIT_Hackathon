@@ -16,7 +16,9 @@ from utils.data_utils import (
     add_correction, get_correction_count_since_last_training,
     get_complaint_stats, get_complaints_with_coords,
     export_complaints_csv, get_model_versions, get_all_corrections,
-    get_agent_leaderboard, get_daily_trend, add_agent
+    get_agent_leaderboard, get_daily_trend, add_agent,
+    get_tickets_for_admin, get_unread_count_admin, mark_tickets_read_admin,
+    get_tickets_by_department, get_unread_count_worker, mark_tickets_read_worker
 )
 from ml.model import CATEGORIES, check_and_retrain
 from ml.model_tracker import (
@@ -35,12 +37,15 @@ def show_agent_dashboard():
     agent = st.session_state.get('current_user', {})
     agent_id = agent.get('agent_id', 'AGT0000')
 
-    # Build tab list — add 'Add Agents' only for admin
+    # Build tab list — add 'Add Agents' and 'Inbox' only for admin
+    unread_admin = get_unread_count_admin()
+    inbox_label = f"📥 Inbox ({unread_admin})" if unread_admin > 0 else "📥 Inbox"
     tab_labels = [
         "📋 Active Queue",
         "🗺️ City Intelligence Map",
         "🧠 AI Intelligence Center",
-        "📊 Analytics & Reports"
+        "📊 Analytics & Reports",
+        inbox_label
     ]
     if st.session_state.get('is_admin', False):
         tab_labels.append("➕ Add Agents")
@@ -50,7 +55,8 @@ def show_agent_dashboard():
     tab_map = tabs[1]
     tab_ai = tabs[2]
     tab_analytics = tabs[3]
-    tab_add_agents = tabs[4] if st.session_state.get('is_admin', False) else None
+    tab_inbox = tabs[4]
+    tab_add_agents = tabs[5] if st.session_state.get('is_admin', False) else None
 
     # ═══════════════════════════════════════════════════════════════════
     # TAB 1: ACTIVE QUEUE
@@ -648,6 +654,51 @@ def show_agent_dashboard():
                         else:
                             styled_error("Agent ID already registered.")
 
+    # ═══════════════════════════════════════════════════════════════════
+    # TAB 5: INBOX (ALL USERS — ADMIN VIEW)
+    # ═══════════════════════════════════════════════════════════════════
+    with tab_inbox:
+        section_header("📥 Inbox — Citizen Tickets",
+                       "Messages raised by citizens about their complaints",
+                       accent="cyan")
+
+        tickets = get_tickets_for_admin()
+        mark_tickets_read_admin()  # Mark all as read when inbox is opened
+
+        if not tickets:
+            st.markdown("""
+            <div style="text-align:center;padding:3rem;color:#8B98B8;
+                font-family:'DM Sans',sans-serif;">
+                📭 No tickets yet. Inbox is empty.
+            </div>
+            """, unsafe_allow_html=True)
+        else:
+            for t in tickets:
+                status_color = "#39FF14" if t['status'] == 'Closed' else "#00D4FF"
+                st.markdown(f"""
+                <div style="background:#111827;border:1px solid rgba(255,255,255,0.08);
+                    border-radius:12px;padding:1rem;margin-bottom:0.75rem;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+                        <span style="font-family:'Sora',sans-serif;font-size:13px;font-weight:600;
+                            color:#F0F4FF;">🎫 Ticket #{t['id']} — Complaint #CMP-{t['complaint_id']:04d}</span>
+                        <span style="font-family:'JetBrains Mono',monospace;font-size:10px;
+                            color:{status_color};border:1px solid {status_color};
+                            padding:2px 8px;border-radius:20px;">{t['status']}</span>
+                    </div>
+                    <div style="font-family:'DM Sans',sans-serif;font-size:12px;color:#8B98B8;
+                        margin-bottom:6px;">
+                        🏷️ Dept: <strong style="color:#F0F4FF;">{t.get('department','—')}</strong>
+                        &nbsp;&nbsp;👤 User ID: <strong style="color:#F0F4FF;">{t['user_id']}</strong>
+                        &nbsp;&nbsp;🕒 <strong style="color:#4A5568;">{str(t.get('created_at',''))[:16]}</strong>
+                    </div>
+                    <div style="font-family:'Inter',sans-serif;font-size:13px;color:#C1C8E4;
+                        background:rgba(0,212,255,0.05);border-left:3px solid #00D4FF;
+                        padding:8px 12px;border-radius:4px;">
+                        {t['message']}
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+
 
 def show_worker_dashboard():
     """Display worker dashboard — department-filtered complaint queue only."""
@@ -657,15 +708,22 @@ def show_worker_dashboard():
     worker_id = worker.get('agent_id', 'AGT0000')
     worker_dept = worker.get('department', '')
 
-    section_header(
-        f"📋 {worker_dept} — Complaint Queue",
-        f"Showing complaints assigned to your department: {worker_dept}",
-        accent="cyan"
-    )
-
     if not worker_dept:
         styled_warning("No department assigned to your account. Contact your admin.")
         return
+
+    # Build worker tabs with unread notification badge
+    unread_worker = get_unread_count_worker(worker_dept)
+    inbox_label_w = f"📥 Inbox ({unread_worker})" if unread_worker > 0 else "📥 Inbox"
+    w_tab_queue, w_tab_inbox = st.tabs([f"📋 {worker_dept} — Complaint Queue", inbox_label_w])
+
+    # ── WORKER TAB 1: COMPLAINT QUEUE ──
+    with w_tab_queue:
+        section_header(
+            f"📋 {worker_dept} — Complaint Queue",
+            f"Showing complaints assigned to your department: {worker_dept}",
+            accent="cyan"
+        )
 
     # Filters
     f_col1, f_col2, f_col3 = st.columns(3)
@@ -751,3 +809,45 @@ def show_worker_dashboard():
                 if c['status'] in ['Pending', 'In Progress']:
                     st.text_input("Resolution notes", key=f"w_resolve_notes_{c['id']}",
                                   placeholder="Add notes about the resolution...")
+
+    # ── WORKER TAB 2: INBOX ──
+    with w_tab_inbox:
+        section_header("📥 Inbox — Your Department's Tickets",
+                       f"Messages from citizens in: {worker_dept}",
+                       accent="cyan")
+
+        w_tickets = get_tickets_by_department(worker_dept)
+        mark_tickets_read_worker(worker_dept)  # Mark as read on open
+
+        if not w_tickets:
+            st.markdown("""
+            <div style="text-align:center;padding:3rem;color:#8B98B8;
+                font-family:'DM Sans',sans-serif;">
+                📭 No tickets for your department yet.
+            </div>
+            """, unsafe_allow_html=True)
+        else:
+            for t in w_tickets:
+                status_color = "#39FF14" if t['status'] == 'Closed' else "#00D4FF"
+                st.markdown(f"""
+                <div style="background:#111827;border:1px solid rgba(255,255,255,0.08);
+                    border-radius:12px;padding:1rem;margin-bottom:0.75rem;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+                        <span style="font-family:'Sora',sans-serif;font-size:13px;font-weight:600;
+                            color:#F0F4FF;">🎫 Ticket #{t['id']} — Complaint #CMP-{t['complaint_id']:04d}</span>
+                        <span style="font-family:'JetBrains Mono',monospace;font-size:10px;
+                            color:{status_color};border:1px solid {status_color};
+                            padding:2px 8px;border-radius:20px;">{t['status']}</span>
+                    </div>
+                    <div style="font-family:'DM Sans',sans-serif;font-size:12px;color:#8B98B8;
+                        margin-bottom:6px;">
+                        👤 User ID: <strong style="color:#F0F4FF;">{t['user_id']}</strong>
+                        &nbsp;&nbsp;🕒 <strong style="color:#4A5568;">{str(t.get('created_at',''))[:16]}</strong>
+                    </div>
+                    <div style="font-family:'Inter',sans-serif;font-size:13px;color:#C1C8E4;
+                        background:rgba(0,212,255,0.05);border-left:3px solid #00D4FF;
+                        padding:8px 12px;border-radius:4px;">
+                        {t['message']}
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)

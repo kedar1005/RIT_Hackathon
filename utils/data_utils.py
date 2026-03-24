@@ -129,6 +129,18 @@ def init_database():
         user_type TEXT NOT NULL,
         expires_at TIMESTAMP NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS tickets (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        complaint_id INTEGER NOT NULL,
+        user_id INTEGER NOT NULL,
+        message TEXT NOT NULL,
+        department TEXT,
+        status TEXT DEFAULT 'Open',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        is_read_admin INTEGER DEFAULT 0,
+        is_read_worker INTEGER DEFAULT 0
+    );
     """)
 
     # Create indexes
@@ -813,3 +825,111 @@ def cleanup_sessions():
         conn.close()
     except Exception:
         pass
+
+
+# ─── TICKET OPERATIONS ────────────────────────────────────────────────
+
+def add_ticket(complaint_id, user_id, message, department):
+    """Raise a new support ticket for a complaint."""
+    try:
+        conn = get_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            """INSERT INTO tickets (complaint_id, user_id, message, department, status)
+               VALUES (?, ?, ?, ?, 'Open')""",
+            (complaint_id, user_id, message, department)
+        )
+        conn.commit()
+        ticket_id = cursor.lastrowid
+        conn.close()
+        return ticket_id
+    except Exception as e:
+        print(f"Error adding ticket: {e}")
+        return None
+
+
+def get_tickets_for_admin():
+    """Return all tickets (for admin inbox)."""
+    try:
+        conn = get_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT * FROM tickets ORDER BY created_at DESC"
+        )
+        rows = [dict(r) for r in cursor.fetchall()]
+        conn.close()
+        return rows
+    except Exception:
+        return []
+
+
+def get_tickets_by_department(dept):
+    """Return tickets filtered by department (for worker inbox)."""
+    try:
+        conn = get_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT * FROM tickets WHERE TRIM(LOWER(department)) = TRIM(LOWER(?)) ORDER BY created_at DESC",
+            (dept,)
+        )
+        rows = [dict(r) for r in cursor.fetchall()]
+        conn.close()
+        return rows
+    except Exception:
+        return []
+
+
+def mark_tickets_read_admin():
+    """Mark all tickets as read by admin."""
+    try:
+        conn = get_connection()
+        cursor = conn.cursor()
+        cursor.execute("UPDATE tickets SET is_read_admin = 1")
+        conn.commit()
+        conn.close()
+    except Exception:
+        pass
+
+
+def mark_tickets_read_worker(dept):
+    """Mark all tickets in a department as read by worker."""
+    try:
+        conn = get_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "UPDATE tickets SET is_read_worker = 1 WHERE TRIM(LOWER(department)) = TRIM(LOWER(?))",
+            (dept,)
+        )
+        conn.commit()
+        conn.close()
+    except Exception:
+        pass
+
+
+def get_unread_count_admin():
+    """Return count of tickets not yet read by admin."""
+    try:
+        conn = get_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT COUNT(*) FROM tickets WHERE is_read_admin = 0")
+        count = cursor.fetchone()[0]
+        conn.close()
+        return count
+    except Exception:
+        return 0
+
+
+def get_unread_count_worker(dept):
+    """Return count of unread tickets for a worker's department."""
+    try:
+        conn = get_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT COUNT(*) FROM tickets WHERE is_read_worker = 0 AND TRIM(LOWER(department)) = TRIM(LOWER(?))",
+            (dept,)
+        )
+        count = cursor.fetchone()[0]
+        conn.close()
+        return count
+    except Exception:
+        return 0
