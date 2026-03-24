@@ -71,7 +71,7 @@ def show_agent_auth():
                 # ID: AGT0001, Password: admin123
                 if agent_id.upper() == "AGT0001" and password == "admin123":
                     # Create persistent session
-                    sid = create_session(1, 'agent')
+                    sid = create_session(0, 'agent')
                     if sid:
                         st.query_params["session"] = sid
                         
