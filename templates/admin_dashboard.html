@@ -1,0 +1,200 @@
+{% extends "base.html" %}
+
+{% block title %}Admin Dashboard{% endblock %}
+
+{% block content %}
+<section class="card-grid card-grid-4">
+    <article class="metric-card"><span>Total</span><strong>{{ stats.total }}</strong></article>
+    <article class="metric-card"><span>Pending</span><strong>{{ stats.pending }}</strong></article>
+    <article class="metric-card"><span>In Progress</span><strong>{{ stats.in_progress }}</strong></article>
+    <article class="metric-card"><span>Resolved</span><strong>{{ stats.resolved }}</strong></article>
+</section>
+
+<section class="dashboard-grid">
+    <article class="panel">
+        <p class="eyebrow">Complaint Queue</p>
+        <h2>Search and update complaints</h2>
+        <form method="get" class="filter-grid">
+            <input type="text" name="term" placeholder="Search complaints" value="{{ search_term }}">
+            <select name="status">
+                {% for option in ['All', 'Pending', 'In Progress', 'Resolved'] %}
+                    <option value="{{ option }}" {% if option == selected_status %}selected{% endif %}>{{ option }}</option>
+                {% endfor %}
+            </select>
+            <select name="urgency">
+                {% for option in ['All', 'High', 'Medium', 'Low'] %}
+                    <option value="{{ option }}" {% if option == selected_urgency %}selected{% endif %}>{{ option }}</option>
+                {% endfor %}
+            </select>
+            <select name="category">
+                {% for option in categories %}
+                    <option value="{{ option }}" {% if option == selected_category %}selected{% endif %}>{{ option }}</option>
+                {% endfor %}
+            </select>
+            <button class="button button-secondary" type="submit">Apply Filters</button>
+            <a class="button button-secondary" href="{{ url_for('admin_export', status=selected_status, urgency=selected_urgency, category=selected_category) }}">Export CSV</a>
+        </form>
+
+        <div class="complaint-list">
+            {% for complaint in complaints %}
+                <article class="complaint-card">
+                    <div class="complaint-head">
+                        <div>
+                            <strong>#CMP-{{ "%04d"|format(complaint.id) }}</strong>
+                            <h3>{{ complaint.category }}</h3>
+                        </div>
+                        <div class="pill-row">
+                            <span class="pill">{{ complaint.status }}</span>
+                            <span class="pill pill-{{ complaint.ai_urgency|lower }}">{{ complaint.ai_urgency }}</span>
+                        </div>
+                    </div>
+                    <p>{{ complaint.description }}</p>
+                    <small>{{ complaint.address }} • {{ complaint.department }} • {{ complaint.created_at }}</small>
+                    <form method="post" action="{{ url_for('admin_update_complaint', complaint_id=complaint.id) }}" class="inline-form inline-form-wide">
+                        <select name="status" required>
+                            {% for option in ['Pending', 'In Progress', 'Resolved'] %}
+                                <option value="{{ option }}" {% if option == complaint.status %}selected{% endif %}>{{ option }}</option>
+                            {% endfor %}
+                        </select>
+                        <input type="text" name="notes" placeholder="Resolution notes">
+                        <button class="button button-secondary" type="submit">Save</button>
+                    </form>
+                </article>
+            {% else %}
+                <p class="muted">No complaints found.</p>
+            {% endfor %}
+        </div>
+    </article>
+
+    <article class="panel">
+        <p class="eyebrow">City Intelligence Map</p>
+        <h2>Filter by city and date</h2>
+        <form method="get" class="filter-grid filter-grid-compact">
+            <input type="hidden" name="term" value="{{ search_term }}">
+            <input type="hidden" name="status" value="{{ selected_status }}">
+            <input type="hidden" name="urgency" value="{{ selected_urgency }}">
+            <input type="hidden" name="category" value="{{ selected_category }}">
+            <select name="city">
+                <option value="All">All cities</option>
+                {% for city in cities %}
+                    <option value="{{ city }}" {% if city == selected_city %}selected{% endif %}>{{ city }}</option>
+                {% endfor %}
+            </select>
+            <input type="date" name="date_from" value="{{ selected_date_from }}">
+            <input type="date" name="date_to" value="{{ selected_date_to }}">
+            <button class="button button-secondary" type="submit">Update Map</button>
+        </form>
+        <div id="city-map" class="map-shell" data-map-points='{{ map_points_json|safe }}'></div>
+    </article>
+</section>
+
+<section class="dashboard-grid">
+    <article class="panel">
+        <p class="eyebrow">Analytics</p>
+        <h2>Daily trend</h2>
+        <div class="trend-bars">
+            {% for row in trend %}
+                <div class="trend-bar">
+                    <span class="trend-value">{{ row.count }}</span>
+                    <div class="bar-track">
+                        <div class="bar-fill" style="height: {{ [row.count * 12, 12]|max }}px;"></div>
+                    </div>
+                    <small>{{ row.day }}</small>
+                </div>
+            {% else %}
+                <p class="muted">No trend data available.</p>
+            {% endfor %}
+        </div>
+    </article>
+
+    <article class="panel">
+        <p class="eyebrow">Leaderboard</p>
+        <h2>Agent performance</h2>
+        <div class="stack compact-stack">
+            {% for row in leaderboard %}
+                <div class="ticket-card">
+                    <strong>{{ row.name }}</strong>
+                    <p>{{ row.agent_id }} • {{ row.department }}</p>
+                    <small>{{ row.total_resolved }} resolved complaints</small>
+                </div>
+            {% else %}
+                <p class="muted">No leaderboard data available.</p>
+            {% endfor %}
+        </div>
+    </article>
+</section>
+
+<section class="dashboard-grid">
+    <article class="panel">
+        <p class="eyebrow">Admin Inbox</p>
+        <h2>Citizen tickets</h2>
+        <div class="summary-chip">Unread when page opened: {{ unread_admin }}</div>
+        <div class="stack compact-stack">
+            {% for ticket in tickets %}
+                <div class="ticket-card">
+                    <strong>#CMP-{{ "%04d"|format(ticket.complaint_id) }}</strong>
+                    <p>{{ ticket.message }}</p>
+                    <small>{{ ticket.department }} • {{ ticket.created_at }}</small>
+                </div>
+            {% else %}
+                <p class="muted">No admin tickets yet.</p>
+            {% endfor %}
+        </div>
+    </article>
+
+    <article class="panel">
+        <p class="eyebrow">Worker Management</p>
+        <h2>Add and manage workers</h2>
+        {% if missing_departments %}
+            <p class="muted">Departments without active workers: {{ missing_departments|join(', ') }}</p>
+        {% endif %}
+        <form method="post" action="{{ url_for('admin_add_worker') }}" class="form-grid">
+            <label>
+                <span>Name</span>
+                <input type="text" name="name" placeholder="Officer Name" required>
+            </label>
+            <label>
+                <span>Agent ID</span>
+                <input type="text" name="agent_id" placeholder="AGT0002" required>
+            </label>
+            <label>
+                <span>Password</span>
+                <input type="password" name="password" placeholder="Temporary password" required>
+            </label>
+            <label>
+                <span>Department</span>
+                <select name="department" required>
+                    {% for department in departments %}
+                        <option value="{{ department }}">{{ department }}</option>
+                    {% endfor %}
+                </select>
+            </label>
+            <button class="button button-primary full-span" type="submit">Create Worker</button>
+        </form>
+
+        <div class="stack compact-stack top-space">
+            {% for worker in workers %}
+                <div class="worker-row">
+                    <div>
+                        <strong>{{ worker.name }}</strong>
+                        <p>{{ worker.agent_id }} • {{ worker.department }}</p>
+                        <small>Warnings: {{ worker.warning_count }}{% if worker.is_blocked %} • Blocked{% endif %}</small>
+                    </div>
+                    <div class="button-row">
+                        <form method="post" action="{{ url_for('admin_warn_worker', agent_id=worker.agent_id) }}">
+                            <button class="button button-secondary" type="submit">Warn</button>
+                        </form>
+                        {% if worker.is_blocked %}
+                            <form method="post" action="{{ url_for('admin_unblock_worker', agent_id=worker.agent_id) }}">
+                                <button class="button button-secondary" type="submit">Unblock</button>
+                            </form>
+                        {% endif %}
+                    </div>
+                </div>
+            {% else %}
+                <p class="muted">No workers found.</p>
+            {% endfor %}
+        </div>
+    </article>
+</section>
+{% endblock %}

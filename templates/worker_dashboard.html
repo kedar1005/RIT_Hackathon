@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+
+{% block title %}Worker Dashboard{% endblock %}
+
+{% block content %}
+<section class="dashboard-grid">
+    <article class="panel">
+        <p class="eyebrow">Department Queue</p>
+        <h2>Assigned complaint stream</h2>
+        <form method="get" class="filter-grid">
+            <input type="text" name="term" placeholder="Search complaints" value="{{ search_term }}">
+            <select name="status">
+                {% for option in ['All', 'Pending', 'In Progress', 'Resolved'] %}
+                    <option value="{{ option }}" {% if option == selected_status %}selected{% endif %}>{{ option }}</option>
+                {% endfor %}
+            </select>
+            <select name="urgency">
+                {% for option in ['All', 'High', 'Medium', 'Low'] %}
+                    <option value="{{ option }}" {% if option == selected_urgency %}selected{% endif %}>{{ option }}</option>
+                {% endfor %}
+            </select>
+            <button class="button button-secondary" type="submit">Apply Filters</button>
+        </form>
+
+        <div class="complaint-list">
+            {% for complaint in complaints %}
+                <article class="complaint-card">
+                    <div class="complaint-head">
+                        <div>
+                            <strong>#CMP-{{ "%04d"|format(complaint.id) }}</strong>
+                            <h3>{{ complaint.category }}</h3>
+                        </div>
+                        <div class="pill-row">
+                            <span class="pill">{{ complaint.status }}</span>
+                            <span class="pill pill-{{ complaint.ai_urgency|lower }}">{{ complaint.ai_urgency }}</span>
+                        </div>
+                    </div>
+                    <p>{{ complaint.description }}</p>
+                    <small>{{ complaint.address }} • {{ complaint.created_at }}</small>
+                    <form method="post" action="{{ url_for('worker_update_complaint', complaint_id=complaint.id) }}" class="inline-form inline-form-wide">
+                        <select name="status" required>
+                            {% for option in ['Pending', 'In Progress', 'Resolved'] %}
+                                <option value="{{ option }}" {% if option == complaint.status %}selected{% endif %}>{{ option }}</option>
+                            {% endfor %}
+                        </select>
+                        <input type="text" name="notes" placeholder="Work notes">
+                        <button class="button button-secondary" type="submit">Update</button>
+                    </form>
+                </article>
+            {% else %}
+                <p class="muted">No complaints for this department.</p>
+            {% endfor %}
+        </div>
+    </article>
+
+    <article class="panel">
+        <p class="eyebrow">Inbox</p>
+        <h2>Department tickets</h2>
+        <div class="summary-chip">Unread when page opened: {{ unread_worker }}</div>
+        <div class="stack compact-stack">
+            {% for ticket in tickets %}
+                <div class="ticket-card">
+                    <strong>#CMP-{{ "%04d"|format(ticket.complaint_id) }}</strong>
+                    <p>{{ ticket.message }}</p>
+                    <small>{{ ticket.department }} • {{ ticket.created_at }}</small>
+                </div>
+            {% else %}
+                <p class="muted">No worker tickets yet.</p>
+            {% endfor %}
+        </div>
+    </article>
+</section>
+{% endblock %}

@@ -1,0 +1,131 @@
+{% extends "base.html" %}
+
+{% block title %}Citizen Dashboard{% endblock %}
+
+{% block content %}
+<section class="dashboard-grid dashboard-grid-wide">
+    <article class="panel">
+        <p class="eyebrow">Submit Complaint</p>
+        <h2>Report a civic issue</h2>
+        <form method="post" enctype="multipart/form-data" class="form-grid">
+            <label>
+                <span>Category</span>
+                <select name="category" required>
+                    {% for category in categories %}
+                        <option value="{{ category }}">{{ category }}</option>
+                    {% endfor %}
+                </select>
+            </label>
+            <label>
+                <span>Your urgency</span>
+                <select name="user_urgency" required>
+                    {% for urgency in urgencies %}
+                        <option value="{{ urgency }}" {% if urgency == 'Medium' %}selected{% endif %}>{{ urgency }}</option>
+                    {% endfor %}
+                </select>
+            </label>
+            <label class="full-span">
+                <span>Address</span>
+                <input type="text" name="address" placeholder="MG Road, near City Hospital" required>
+            </label>
+            <label class="full-span">
+                <span>Nearest landmark</span>
+                <input type="text" name="landmark" placeholder="Opposite SBI Bank">
+            </label>
+            <label class="full-span">
+                <span>Description</span>
+                <textarea name="description" rows="5" placeholder="Describe the issue clearly" required></textarea>
+            </label>
+            <label class="full-span">
+                <span>Photo</span>
+                <input type="file" name="image" accept="image/*" capture="environment">
+            </label>
+            <button class="button button-primary full-span" type="submit">Submit with AI Analysis</button>
+        </form>
+    </article>
+
+    <article class="panel">
+        <p class="eyebrow">Inbox</p>
+        <h2>Updates and tickets</h2>
+        <div class="stack compact-stack">
+            <div class="summary-chip">Unread updates: {{ unread_tickets }}</div>
+            {% if tickets %}
+                {% for ticket in tickets %}
+                    <div class="ticket-card">
+                        <strong>Complaint #CMP-{{ "%04d"|format(ticket.complaint_id) }}</strong>
+                        <p>{{ ticket.message }}</p>
+                        <small>{{ ticket.department }} • {{ ticket.created_at }}</small>
+                    </div>
+                {% endfor %}
+            {% else %}
+                <p class="muted">No ticket messages yet.</p>
+            {% endif %}
+        </div>
+    </article>
+</section>
+
+<section class="panel">
+    <p class="eyebrow">My Complaints</p>
+    <h2>Track submitted issues</h2>
+    <div class="complaint-list">
+        {% if complaints %}
+            {% for complaint in complaints %}
+                <article class="complaint-card">
+                    <div class="complaint-head">
+                        <div>
+                            <strong>#CMP-{{ "%04d"|format(complaint.id) }}</strong>
+                            <h3>{{ complaint.category }}</h3>
+                        </div>
+                        <div class="pill-row">
+                            <span class="pill">{{ complaint.status }}</span>
+                            <span class="pill pill-{{ complaint.ai_urgency|lower }}">{{ complaint.ai_urgency }}</span>
+                        </div>
+                    </div>
+                    <p>{{ complaint.description }}</p>
+                    <small>{{ complaint.address }} • {{ complaint.created_at }}</small>
+
+                    <div class="detail-grid">
+                        <div>
+                            <span class="detail-label">Department</span>
+                            <strong>{{ complaint.department }}</strong>
+                        </div>
+                        <div>
+                            <span class="detail-label">AI Method</span>
+                            <strong>{{ complaint.ai_method }}</strong>
+                        </div>
+                        <div>
+                            <span class="detail-label">Estimated Resolution</span>
+                            <strong>{{ complaint.estimated_resolution or 'Pending assessment' }}</strong>
+                        </div>
+                    </div>
+
+                    <div class="embedded-actions">
+                        <form method="post" action="{{ url_for('citizen_ticket', complaint_id=complaint.id) }}" class="inline-form">
+                            <input type="hidden" name="department" value="{{ complaint.department }}">
+                            <input type="text" name="message" placeholder="Need help on this complaint?">
+                            <button class="button button-secondary" type="submit">Raise Ticket</button>
+                        </form>
+
+                        {% if complaint.status == 'Resolved' %}
+                            <form method="post" action="{{ url_for('citizen_feedback', complaint_id=complaint.id) }}" class="inline-form">
+                                <select name="rating" required>
+                                    <option value="">Rate service</option>
+                                    <option value="5">5</option>
+                                    <option value="4">4</option>
+                                    <option value="3">3</option>
+                                    <option value="2">2</option>
+                                    <option value="1">1</option>
+                                </select>
+                                <input type="text" name="comment" placeholder="Optional feedback">
+                                <button class="button button-secondary" type="submit">Submit Feedback</button>
+                            </form>
+                        {% endif %}
+                    </div>
+                </article>
+            {% endfor %}
+        {% else %}
+            <p class="muted">No complaints submitted yet.</p>
+        {% endif %}
+    </div>
+</section>
+{% endblock %}

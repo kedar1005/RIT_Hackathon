@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+
+{% block title %}CitiZen AI Home{% endblock %}
+
+{% block content %}
+<section class="hero">
+    <div class="hero-copy">
+        <p class="eyebrow">RIT Hackathon Civic Platform</p>
+        <h1>Simple city issue reporting with a real Flask frontend.</h1>
+        <p class="hero-text">
+            This starts the migration from Streamlit to HTML, CSS, and JavaScript.
+            The backend logic stays the same while the frontend becomes easier to scale.
+        </p>
+        <div class="hero-actions">
+            <a class="button button-primary" href="{{ url_for('citizen_login') }}">Citizen Login</a>
+            <a class="button button-secondary" href="{{ url_for('admin_login') }}">Admin Login</a>
+            <a class="button button-secondary" href="{{ url_for('worker_login') }}">Worker Login</a>
+        </div>
+    </div>
+    <div class="hero-panel">
+        <div class="metric-grid">
+            <article class="metric-card"><span>Total Complaints</span><strong>{{ stats.total }}</strong></article>
+            <article class="metric-card"><span>Pending</span><strong>{{ stats.pending }}</strong></article>
+            <article class="metric-card"><span>In Progress</span><strong>{{ stats.in_progress }}</strong></article>
+            <article class="metric-card"><span>Resolved</span><strong>{{ stats.resolved }}</strong></article>
+        </div>
+    </div>
+</section>
+
+<section class="card-grid card-grid-3">
+    <article class="panel">
+        <p class="eyebrow">Citizen Portal</p>
+        <h3>Submit complaints with AI-assisted classification</h3>
+        <p>Upload a photo, add the location, and keep the same complaint database and ticket flow.</p>
+    </article>
+    <article class="panel">
+        <p class="eyebrow">Admin Control</p>
+        <h3>Track analytics, map points, workers, and exports</h3>
+        <p>The admin dashboard now has a Flask shell ready for filters, status updates, and worker management.</p>
+    </article>
+    <article class="panel">
+        <p class="eyebrow">Worker Queue</p>
+        <h3>Keep department-level resolution workflows</h3>
+        <p>Workers still use the same assignment logic, complaint statuses, and inbox records from the database.</p>
+    </article>
+</section>
+{% endblock %}

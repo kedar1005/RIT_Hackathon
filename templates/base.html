@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{% block title %}CitiZen AI{% endblock %}</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
+</head>
+<body>
+    <div class="page-shell">
+        <header class="topbar">
+            <a class="brand" href="{{ url_for('home') }}">
+                <span class="brand-mark">CA</span>
+                <span>
+                    <strong>CitiZen AI</strong>
+                    <small>Flask Frontend</small>
+                </span>
+            </a>
+
+            <nav class="topnav">
+                {% if current_role == 'citizen' %}
+                    <a href="{{ url_for('citizen_dashboard') }}">Citizen Dashboard</a>
+                {% elif current_role == 'agent' and is_admin %}
+                    <a href="{{ url_for('admin_dashboard') }}">Admin Dashboard</a>
+                {% elif current_role == 'worker' %}
+                    <a href="{{ url_for('worker_dashboard') }}">Worker Dashboard</a>
+                {% else %}
+                    <a href="{{ url_for('citizen_login') }}">Citizen</a>
+                    <a href="{{ url_for('admin_login') }}">Admin</a>
+                    <a href="{{ url_for('worker_login') }}">Worker</a>
+                {% endif %}
+
+                {% if current_user %}
+                    <a class="ghost-link" href="{{ url_for('logout') }}">Logout</a>
+                {% endif %}
+            </nav>
+        </header>
+
+        {% if current_user %}
+            <section class="active-user">
+                <div>
+                    <p class="eyebrow">Signed In</p>
+                    <h2>{{ current_user.name }}</h2>
+                    {% if current_user.email %}
+                        <p>{{ current_user.email }}</p>
+                    {% else %}
+                        <p>{{ current_user.agent_id }} • {{ current_user.department }}</p>
+                    {% endif %}
+                </div>
+                <span class="status-pill">
+                    {% if is_admin %}
+                        System Administrator
+                    {% elif current_role == 'worker' %}
+                        Department Worker
+                    {% else %}
+                        Citizen Portal
+                    {% endif %}
+                </span>
+            </section>
+        {% endif %}
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                <section class="flash-stack">
+                    {% for category, message in messages %}
+                        <div class="flash flash-{{ category }}">{{ message }}</div>
+                    {% endfor %}
+                </section>
+            {% endif %}
+        {% endwith %}
+
+        <main class="content">
+            {% block content %}{% endblock %}
+        </main>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>

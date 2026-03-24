@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+
+{% block title %}{{ page_title }}{% endblock %}
+
+{% block content %}
+<section class="auth-shell">
+    <article class="panel auth-panel">
+        <p class="eyebrow">{{ page_title }}</p>
+        <h1>{{ page_title }}</h1>
+        <p class="hero-text">{{ page_subtitle }}</p>
+
+        {% if form_type == 'citizen_login' %}
+            <form method="post" class="form-grid">
+                <label>
+                    <span>Email</span>
+                    <input type="email" name="email" placeholder="you@example.com" required>
+                </label>
+                <label>
+                    <span>Password</span>
+                    <input type="password" name="password" placeholder="Enter your password" required>
+                </label>
+                <button class="button button-primary full-span" type="submit">Sign In</button>
+            </form>
+            <p class="inline-link">New here? <a href="{{ url_for('citizen_register') }}">Create an account</a></p>
+        {% elif form_type == 'citizen_register' %}
+            <form method="post" class="form-grid">
+                <label>
+                    <span>Full Name</span>
+                    <input type="text" name="name" placeholder="Priya Sharma" required>
+                </label>
+                <label>
+                    <span>Email</span>
+                    <input type="email" name="email" placeholder="priya@example.com" required>
+                </label>
+                <label>
+                    <span>Password</span>
+                    <input type="password" name="password" placeholder="Min 6 chars" required>
+                </label>
+                <label>
+                    <span>Confirm Password</span>
+                    <input type="password" name="confirm_password" placeholder="Repeat password" required>
+                </label>
+                <label>
+                    <span>Pincode</span>
+                    <input type="text" name="pincode" placeholder="416XXX" required>
+                </label>
+                <label>
+                    <span>Aadhaar or Citizen ID</span>
+                    <input type="text" name="identity_id" placeholder="12-digit Aadhaar or citizen ID" required>
+                </label>
+                <button class="button button-primary full-span" type="submit">Create Account</button>
+            </form>
+            <p class="inline-link">Already registered? <a href="{{ url_for('citizen_login') }}">Sign in</a></p>
+        {% else %}
+            <form method="post" class="form-grid">
+                <label>
+                    <span>Agent ID</span>
+                    <input type="text" name="agent_id" placeholder="{% if form_type == 'admin_login' %}AGT0001{% else %}AGT0002{% endif %}" required>
+                </label>
+                <label>
+                    <span>Password</span>
+                    <input type="password" name="password" placeholder="Enter your password" required>
+                </label>
+                <button class="button button-primary full-span" type="submit">
+                    {% if form_type == 'admin_login' %}Access Admin Panel{% else %}Open Worker Queue{% endif %}
+                </button>
+            </form>
+        {% endif %}
+    </article>
+</section>
+{% endblock %}
