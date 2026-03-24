@@ -4,6 +4,7 @@ Login and registration for citizens.
 """
 import hashlib
 import re
+import random
 import streamlit as st
 from utils.data_utils import add_user, authenticate_user
 from utils.ui_utils import inject_global_css, hero_header, styled_error, styled_success
@@ -60,19 +61,88 @@ def show_user_auth():
         </div>
         """, unsafe_allow_html=True)
 
-        with st.form("login_form", clear_on_submit=False):
-            email = st.text_input("Email Address", placeholder="you@example.com")
-            password = st.text_input("Password", type="password", placeholder="Enter your password")
-            submitted = st.form_submit_button("Sign In →", use_container_width=True)
+        # (Emoji CAPTCHA initialization removed)
 
-            if submitted:
-                if not email or not password:
-                    styled_error("Please fill in all fields")
-                elif not _validate_email(email):
+        # --- OTP INITIALIZATION ---
+        if 'otp_val' not in st.session_state:
+            st.session_state.otp_val = None
+            st.session_state.otp_sent = False
+
+        # CSS for better button alignment
+        st.markdown("<style>div[data-testid='stButton'] > button { height: 45px; margin-top: 28px; }</style>", unsafe_allow_html=True)
+
+        # Removed st.form to allow interactive 'Get OTP' button beside Aadhaar
+        email = st.text_input("Email Address", placeholder="you@example.com", key="login_email")
+        password = st.text_input("Password", type="password", placeholder="Enter your password", key="login_password")
+        
+        # Row 1: Aadhaar + Get OTP
+        id_col, btn_col = st.columns([2, 1])
+        with id_col:
+            id_val = st.text_input("Aadhaar Number or Citizen ID", placeholder="12-digit Aadhaar / Min 6 ID", key="login_id")
+        with btn_col:
+            if st.button("📲 Get OTP", use_container_width=True, key="btn_get_otp"):
+                if id_val and id_val.strip():
+                    st.session_state.otp_val = str(random.randint(100000, 999999))
+                    st.session_state.otp_sent = True
+                    # Display OTP prominently on the page
+                    st.success(f"### [ OTP: {st.session_state.otp_val} ]")
+                    st.info("Please enter this 6-digit code in the field below.")
+                    st.toast(f"OTP Sent: {st.session_state.otp_val}")
+                else:
+                    st.error("Enter ID first")
+        
+        # Row 2: reCAPTCHA Simulation
+        st.markdown("""
+            <div style="border: 1px solid rgba(255,255,255,0.1); padding: 12px; border-radius: 8px; 
+                background-color: rgba(255,255,255,0.03); display: flex; align-items: center; 
+                justify-content: space-between; margin-top: 10px;">
+                <div style="display: flex; align-items: center; color: #F0F4FF; font-family: 'Inter', sans-serif;">
+                    <span style="font-size: 14px;">I'm not a robot</span>
+                </div>
+                <div style="text-align: right; opacity: 0.8;">
+                    <img src="https://www.gstatic.com/recaptcha/api2/logo_48.png" width="28" style="filter: grayscale(1) brightness(2);">
+                    <div style="font-size: 8px; color: #8B98B8; margin-top: 2px;">reCAPTCHA</div>
+                </div>
+            </div>
+        """, unsafe_allow_html=True)
+        is_human = st.checkbox("Check this box to verify identity", key="login_captcha")
+
+        # Row 3: OTP Input
+        otp_input = st.text_input("Enter 6-Digit OTP", placeholder="Check success message above", key="login_otp")
+        
+        # Sign In Button
+        if st.button("Sign In →", type="primary", use_container_width=True, key="btn_signin"):
+            # Ensure we get the latest values explicitly from session state
+            email_val = st.session_state.get('login_email', '').strip()
+            pass_val = st.session_state.get('login_password', '').strip()
+            id_val_state = st.session_state.get('login_id', '').strip()
+            otp_val_state = st.session_state.get('login_otp', '').strip()
+            
+            # Debugging check for empty fields
+            missing_fields = []
+            if not email_val: missing_fields.append("Email")
+            if not pass_val: missing_fields.append("Password")
+            if not id_val_state: missing_fields.append("ID")
+            if not otp_val_state: missing_fields.append("OTP")
+
+            if missing_fields:
+                styled_error(f"Please fill in all fields: {', '.join(missing_fields)}")
+            else:
+                # Validate ID Format
+                is_aadhaar = id_val_state.isdigit() and len(id_val_state) == 12
+                is_citizen_id = id_val_state.isalnum() and len(id_val_state) >= 6
+                
+                if not (is_aadhaar or is_citizen_id):
+                    styled_error("Invalid Aadhaar (12 digits) or Citizen ID (min 6 alphanumeric)")
+                elif not st.session_state.login_captcha:
+                    styled_error("Please verify that you are not a robot")
+                elif otp_val_state != st.session_state.otp_val:
+                    styled_error("Invalid or Expired OTP")
+                elif not _validate_email(email_val):
                     styled_error("Please enter a valid email address")
                 else:
-                    password_hash = _hash_password(password)
-                    user = authenticate_user(email, password_hash)
+                    password_hash = _hash_password(pass_val)
+                    user = authenticate_user(email_val, password_hash)
                     if user:
                         st.session_state.authenticated = True
                         st.session_state.user_type = 'citizen'
@@ -82,7 +152,10 @@ def show_user_auth():
                             'email': user['email']
                         }
                         st.session_state.page = 'user_auth'
-                        styled_success(f"Welcome back, {user['name']}!")
+                        styled_success(f"Verified! Welcome back, {user['name']}!")
+                        # Reset security states after successful login
+                        st.session_state.pop('otp_val', None)
+                        st.session_state.pop('captcha_options', None)
                         st.rerun()
                     else:
                         styled_error("Invalid email or password. Please try again.")
@@ -104,11 +177,23 @@ def show_user_auth():
                                          placeholder="Min 6 chars, letter + number")
             reg_confirm = st.text_input("Confirm Password", type="password",
                                         placeholder="Repeat your password")
+            
+            # Location Field (Only Pincode needed, City defaulted to Kolhapur)
+            reg_pincode = st.text_input("Pincode", placeholder="416XXX (Must start with 416)")
+
+            st.markdown("""
+            <div style="font-size:11px;color:#8B98B8;margin-bottom:10px;">
+                📍 Note: Platform exclusive to <b>Kolhapur</b> residents. Area validated by pincode.
+            </div>
+            """, unsafe_allow_html=True)
+
             reg_submitted = st.form_submit_button("Create Account →", use_container_width=True)
 
             if reg_submitted:
-                if not all([reg_name, reg_email, reg_password, reg_confirm]):
+                if not all([reg_name, reg_email, reg_password, reg_confirm, reg_pincode]):
                     styled_error("Please fill in all fields")
+                elif not reg_pincode.startswith("416"):
+                    styled_error("Registration allowed only for Kolhapur residents (Pincode must start with 416)")
                 elif not _validate_email(reg_email):
                     styled_error("Please enter a valid email address")
                 elif reg_password != reg_confirm:
@@ -119,7 +204,7 @@ def show_user_auth():
                         styled_error(msg)
                     else:
                         password_hash = _hash_password(reg_password)
-                        user_id = add_user(reg_name, reg_email, password_hash)
+                        user_id = add_user(reg_name, reg_email, password_hash, city="Kolhapur", pincode=reg_pincode)
                         if user_id:
                             st.session_state.authenticated = True
                             st.session_state.user_type = 'citizen'

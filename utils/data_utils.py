@@ -139,20 +139,30 @@ def init_database():
         except Exception:
             pass
 
+    # Migration: Add city and pincode to users table IF NOT EXISTS
+    try:
+        cursor.execute("ALTER TABLE users ADD COLUMN city TEXT")
+    except Exception:
+        pass
+    try:
+        cursor.execute("ALTER TABLE users ADD COLUMN pincode TEXT")
+    except Exception:
+        pass
+
     conn.commit()
     conn.close()
 
 
 # ─── USER OPERATIONS ──────────────────────────────────────────────────
 
-def add_user(name, email, password_hash):
+def add_user(name, email, password_hash, city=None, pincode=None):
     """Register a new citizen."""
     try:
         conn = get_connection()
         cursor = conn.cursor()
         cursor.execute(
-            "INSERT INTO users (name, email, password_hash) VALUES (?, ?, ?)",
-            (name, email, password_hash)
+            "INSERT INTO users (name, email, password_hash, city, pincode) VALUES (?, ?, ?, ?, ?)",
+            (name, email, password_hash, city, pincode)
         )
         conn.commit()
         user_id = cursor.lastrowid

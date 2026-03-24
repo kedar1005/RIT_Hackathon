@@ -99,3 +99,17 @@ def haversine_distance(lat1, lon1, lat2, lon2):
     a = (math.sin(dphi / 2) ** 2 +
          math.cos(phi1) * math.cos(phi2) * math.sin(dlambda / 2) ** 2)
     return 2 * R * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+
+
+# Kolhapur Bounding Box
+MIN_LAT = 16.60
+MAX_LAT = 16.80
+MIN_LON = 74.15
+MAX_LON = 74.35
+
+
+def is_in_kolhapur(lat, lon):
+    """Check if lat/lon is within Kolhapur bounding box."""
+    if lat is None or lon is None:
+        return False
+    return MIN_LAT <= lat <= MAX_LAT and MIN_LON <= lon <= MAX_LON
