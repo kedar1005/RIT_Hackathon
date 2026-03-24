@@ -31,7 +31,7 @@ def _validate_agent_id(agent_id):
 
 
 def show_agent_auth():
-    """Display agent authentication page."""
+    """Display agent authentication page (Admin Login only, no public registration)."""
     inject_global_css()
 
     col_back, _ = st.columns([1, 5])
@@ -41,96 +41,120 @@ def show_agent_auth():
             st.rerun()
 
     hero_header(
-        "Agent Control Center",
-        "Access the resolution management portal",
-        badge_text="🛡️ AGENT ACCESS"
+        "Admin Control Center",
+        "Access the administration portal",
+        badge_text="🛡️ ADMIN ACCESS"
     )
 
-    tab_login, tab_register = st.tabs(["🔑 Agent Sign In", "📝 Register Agent"])
+    st.markdown("""
+    <div style="max-width:400px;margin:0 auto;padding:1.5rem;
+        background:#111827;border:1px solid rgba(124,58,237,0.2);
+        border-radius:16px;">
+        <h3 style="font-family:'Sora',sans-serif;font-size:18px;font-weight:600;
+            color:#F0F4FF;text-align:center;margin-bottom:1rem;">Admin Login</h3>
+    </div>
+    """, unsafe_allow_html=True)
 
-    with tab_login:
-        st.markdown("""
-        <div style="max-width:400px;margin:0 auto;padding:1.5rem;
-            background:#111827;border:1px solid rgba(124,58,237,0.2);
-            border-radius:16px;">
-            <h3 style="font-family:'Sora',sans-serif;font-size:18px;font-weight:600;
-                color:#F0F4FF;text-align:center;margin-bottom:1rem;">Agent Login</h3>
-        </div>
-        """, unsafe_allow_html=True)
+    with st.form("agent_login_form", clear_on_submit=False):
+        agent_id = st.text_input("Agent ID", placeholder="AGT0001")
+        password = st.text_input("Password", type="password",
+                                 placeholder="Enter your password")
+        submitted = st.form_submit_button("Access Portal →", use_container_width=True)
 
-        with st.form("agent_login_form", clear_on_submit=False):
-            agent_id = st.text_input("Agent ID", placeholder="AGT0001")
-            password = st.text_input("Password", type="password",
-                                     placeholder="Enter your password")
-            submitted = st.form_submit_button("Access Portal →", use_container_width=True)
+        if submitted:
+            if not agent_id or not password:
+                styled_error("Please fill in all fields")
+            elif not _validate_agent_id(agent_id):
+                styled_error("Agent ID must be in format AGT followed by 4 digits (e.g., AGT0001)")
+            else:
+                # ─── CONSTANT ADMIN LOGIN ───
+                # ID: AGT0001, Password: admin123
+                if agent_id.upper() == "AGT0001" and password == "admin123":
+                    st.session_state.authenticated = True
+                    st.session_state.user_type = 'agent'
+                    st.session_state.is_admin = True
+                    st.session_state.current_user = {
+                        'id': 1, # Placeholder ID for constant admin
+                        'name': "System Administrator",
+                        'agent_id': "AGT0001",
+                        'department': "Administration"
+                    }
+                    st.session_state.page = 'agent_auth'
+                    styled_success("Admin Access Granted. Welcome, System Administrator.")
+                    st.rerun()
 
-            if submitted:
-                if not agent_id or not password:
-                    styled_error("Please fill in all fields")
-                elif not _validate_agent_id(agent_id):
-                    styled_error("Agent ID must be in format AGT followed by 4 digits (e.g., AGT0001)")
+                # ─── NORMAL AGENT LOGIN (DB) ───
+                password_hash = _hash_password(password)
+                agent = authenticate_agent(agent_id, password_hash)
+                if agent:
+                    st.session_state.authenticated = True
+                    st.session_state.user_type = 'agent'
+                    # Even if logging in via DB, double check ID for admin privileges
+                    st.session_state.is_admin = (agent_id.upper() == 'AGT0001')
+                    st.session_state.current_user = {
+                        'id': agent['id'],
+                        'name': agent['name'],
+                        'agent_id': agent['agent_id'],
+                        'department': agent['department']
+                    }
+                    st.session_state.page = 'agent_auth'
+                    styled_success(f"Access granted. Welcome, {agent['name']}.")
+                    st.rerun()
                 else:
-                    password_hash = _hash_password(password)
-                    agent = authenticate_agent(agent_id, password_hash)
-                    if agent:
-                        st.session_state.authenticated = True
-                        st.session_state.user_type = 'agent'
-                        st.session_state.current_user = {
-                            'id': agent['id'],
-                            'name': agent['name'],
-                            'agent_id': agent['agent_id'],
-                            'department': agent['department']
-                        }
-                        st.session_state.page = 'agent_auth'
-                        styled_success(f"Access granted. Welcome, {agent['name']}.")
-                        st.rerun()
-                    else:
-                        styled_error("Invalid credentials. Access denied.")
+                    styled_error("Invalid credentials. Access denied.")
 
-    with tab_register:
-        st.markdown("""
-        <div style="max-width:400px;margin:0 auto;padding:1.5rem;
-            background:#111827;border:1px solid rgba(124,58,237,0.2);
-            border-radius:16px;">
-            <h3 style="font-family:'Sora',sans-serif;font-size:18px;font-weight:600;
-                color:#F0F4FF;text-align:center;margin-bottom:1rem;">Agent Registration</h3>
-        </div>
-        """, unsafe_allow_html=True)
 
-        with st.form("agent_register_form", clear_on_submit=False):
-            reg_name = st.text_input("Full Name", placeholder="Officer Rahul Mehta")
-            reg_agent_id = st.text_input("Agent ID", placeholder="AGT0001")
-            reg_department = st.selectbox("Department", DEPARTMENTS)
-            reg_password = st.text_input("Create Password", type="password",
-                                         placeholder="Min 6 characters")
-            reg_confirm = st.text_input("Confirm Password", type="password")
-            reg_submitted = st.form_submit_button("Register Agent →",
-                                                   use_container_width=True)
+def show_worker_auth():
+    """Display worker login page. Workers are agents who login to see department-filtered complaints."""
+    inject_global_css()
 
-            if reg_submitted:
-                if not all([reg_name, reg_agent_id, reg_password, reg_confirm]):
-                    styled_error("Please fill in all fields")
-                elif not _validate_agent_id(reg_agent_id):
-                    styled_error("Agent ID must be AGT followed by 4 digits (e.g., AGT0001)")
-                elif reg_password != reg_confirm:
-                    styled_error("Passwords do not match")
-                elif len(reg_password) < 6:
-                    styled_error("Password must be at least 6 characters")
+    col_back, _ = st.columns([1, 5])
+    with col_back:
+        if st.button("← Back to Home"):
+            st.session_state.page = 'landing'
+            st.rerun()
+
+    hero_header(
+        "Worker Portal",
+        "Access your department complaint queue",
+        badge_text="👷 WORKER ACCESS"
+    )
+
+    st.markdown("""
+    <div style="max-width:400px;margin:0 auto;padding:1.5rem;
+        background:#111827;border:1px solid rgba(0,212,255,0.2);
+        border-radius:16px;">
+        <h3 style="font-family:'Sora',sans-serif;font-size:18px;font-weight:600;
+            color:#F0F4FF;text-align:center;margin-bottom:1rem;">Worker Login</h3>
+    </div>
+    """, unsafe_allow_html=True)
+
+    with st.form("worker_login_form", clear_on_submit=False):
+        agent_id = st.text_input("Agent ID", placeholder="AGT0002")
+        password = st.text_input("Password", type="password",
+                                 placeholder="Enter your password")
+        submitted = st.form_submit_button("Login →", use_container_width=True)
+
+        if submitted:
+            if not agent_id or not password:
+                styled_error("Please fill in all fields")
+            elif not _validate_agent_id(agent_id):
+                styled_error("Agent ID must be in format AGT followed by 4 digits (e.g., AGT0002)")
+            else:
+                password_hash = _hash_password(password)
+                agent = authenticate_agent(agent_id, password_hash)
+                if agent:
+                    st.session_state.authenticated = True
+                    st.session_state.user_type = 'worker'
+                    st.session_state.is_admin = False
+                    st.session_state.current_user = {
+                        'id': agent['id'],
+                        'name': agent['name'],
+                        'agent_id': agent['agent_id'],
+                        'department': agent['department']
+                    }
+                    st.session_state.page = 'worker_auth'
+                    styled_success(f"Welcome, {agent['name']}! Department: {agent['department']}")
+                    st.rerun()
                 else:
-                    password_hash = _hash_password(reg_password)
-                    result = add_agent(reg_name, reg_agent_id, password_hash,
-                                       reg_department)
-                    if result:
-                        st.session_state.authenticated = True
-                        st.session_state.user_type = 'agent'
-                        st.session_state.current_user = {
-                            'id': result,
-                            'name': reg_name,
-                            'agent_id': reg_agent_id,
-                            'department': reg_department
-                        }
-                        st.session_state.page = 'agent_auth'
-                        styled_success("Agent registered. Access granted.")
-                        st.rerun()
-                    else:
-                        styled_error("Agent ID already registered.")
+                    styled_error("Invalid credentials. Access denied.")

@@ -16,7 +16,7 @@ from utils.data_utils import (
     add_correction, get_correction_count_since_last_training,
     get_complaint_stats, get_complaints_with_coords,
     export_complaints_csv, get_model_versions, get_all_corrections,
-    get_agent_leaderboard, get_daily_trend
+    get_agent_leaderboard, get_daily_trend, add_agent
 )
 from ml.model import CATEGORIES, check_and_retrain
 from ml.model_tracker import (
@@ -35,12 +35,22 @@ def show_agent_dashboard():
     agent = st.session_state.get('current_user', {})
     agent_id = agent.get('agent_id', 'AGT0000')
 
-    tab_queue, tab_map, tab_ai, tab_analytics = st.tabs([
+    # Build tab list — add 'Add Agents' only for admin
+    tab_labels = [
         "📋 Active Queue",
         "🗺️ City Intelligence Map",
         "🧠 AI Intelligence Center",
         "📊 Analytics & Reports"
-    ])
+    ]
+    if st.session_state.get('is_admin', False):
+        tab_labels.append("➕ Add Agents")
+
+    tabs = st.tabs(tab_labels)
+    tab_queue = tabs[0]
+    tab_map = tabs[1]
+    tab_ai = tabs[2]
+    tab_analytics = tabs[3]
+    tab_add_agents = tabs[4] if st.session_state.get('is_admin', False) else None
 
     # ═══════════════════════════════════════════════════════════════════
     # TAB 1: ACTIVE QUEUE
@@ -588,3 +598,156 @@ def show_agent_dashboard():
                     styled_info("No complaints match the selected filters")
             except Exception as e:
                 styled_error(f"Export error: {str(e)[:80]}")
+
+    # ═══════════════════════════════════════════════════════════════════
+    # TAB 5: ADD AGENTS (ADMIN ONLY)
+    # ═══════════════════════════════════════════════════════════════════
+    if tab_add_agents is not None:
+        with tab_add_agents:
+            section_header("Register New Agent",
+                           "Admin-only: Add a new agent to the system",
+                           accent="purple")
+
+            st.markdown("""
+            <div style="max-width:500px;margin:0 auto;padding:1.5rem;
+                background:#111827;border:1px solid rgba(124,58,237,0.2);
+                border-radius:16px;">
+                <h3 style="font-family:'Sora',sans-serif;font-size:18px;font-weight:600;
+                    color:#F0F4FF;text-align:center;margin-bottom:0.5rem;">➕ Add New Agent</h3>
+                <p style="font-family:'DM Sans',sans-serif;font-size:12px;color:#8B98B8;
+                    text-align:center;">Fill in agent details and assign a department</p>
+            </div>
+            """, unsafe_allow_html=True)
+
+            with st.form("admin_register_agent_form", clear_on_submit=True):
+                from auth.agent_auth import DEPARTMENTS, _hash_password, _validate_agent_id
+
+                reg_name = st.text_input("Full Name", placeholder="Officer Rahul Mehta")
+                reg_agent_id = st.text_input("Agent ID", placeholder="AGT0002")
+                reg_department = st.selectbox("Assign Department", DEPARTMENTS)
+                reg_password = st.text_input("Create Password", type="password",
+                                             placeholder="Min 6 characters")
+                reg_confirm = st.text_input("Confirm Password", type="password")
+                reg_submitted = st.form_submit_button("Register Agent →",
+                                                       use_container_width=True)
+
+                if reg_submitted:
+                    if not all([reg_name, reg_agent_id, reg_password, reg_confirm]):
+                        styled_error("Please fill in all fields")
+                    elif not _validate_agent_id(reg_agent_id):
+                        styled_error("Agent ID must be AGT followed by 4 digits (e.g., AGT0002)")
+                    elif reg_password != reg_confirm:
+                        styled_error("Passwords do not match")
+                    elif len(reg_password) < 6:
+                        styled_error("Password must be at least 6 characters")
+                    else:
+                        password_hash = _hash_password(reg_password)
+                        result = add_agent(reg_name, reg_agent_id, password_hash, reg_department)
+                        if result:
+                            styled_success(f"Agent {reg_agent_id} ({reg_department}) registered successfully!")
+                        else:
+                            styled_error("Agent ID already registered.")
+
+
+def show_worker_dashboard():
+    """Display worker dashboard — department-filtered complaint queue only."""
+    inject_global_css()
+
+    worker = st.session_state.get('current_user', {})
+    worker_id = worker.get('agent_id', 'AGT0000')
+    worker_dept = worker.get('department', '')
+
+    section_header(
+        f"📋 {worker_dept} — Complaint Queue",
+        f"Showing complaints assigned to your department: {worker_dept}",
+        accent="cyan"
+    )
+
+    if not worker_dept:
+        styled_warning("No department assigned to your account. Contact your admin.")
+        return
+
+    # Filters
+    f_col1, f_col2, f_col3 = st.columns(3)
+    with f_col1:
+        status_f = st.selectbox("Status", ["All", "Pending", "In Progress", "Resolved"],
+                                key="wq_status")
+    with f_col2:
+        urgency_f = st.selectbox("Urgency", ["All", "High", "Medium", "Low"],
+                                 key="wq_urg")
+    with f_col3:
+        search_f = st.text_input("🔍 Search", key="wq_search",
+                                 placeholder="Search complaints...")
+
+    # Fetch department-filtered complaints
+    complaints = search_complaints(
+        term=search_f if search_f else None,
+        status_filter=status_f,
+        urgency_filter=urgency_f,
+        department_filter=worker_dept
+    )
+
+    # Summary stats
+    total = len(complaints)
+    pending = len([c for c in complaints if c['status'] == 'Pending'])
+    high = len([c for c in complaints if c.get('ai_urgency') == 'High'])
+    resolved = len([c for c in complaints if c['status'] == 'Resolved'])
+
+    s_col1, s_col2, s_col3, s_col4 = st.columns(4)
+    with s_col1:
+        stat_card("Total", str(total), color="cyan", icon="📋")
+    with s_col2:
+        stat_card("Pending", str(pending), color="amber", icon="⏳")
+    with s_col3:
+        stat_card("High Urgency", str(high), color="red", icon="🔴")
+    with s_col4:
+        stat_card("Resolved", str(resolved), color="green", icon="✅")
+
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    if not complaints:
+        empty_state(f"No complaints in {worker_dept} department", icon="📭")
+    else:
+        for c in complaints:
+            complaint_card(
+                complaint_id=c['id'],
+                category=c['category'],
+                description=c['description'],
+                urgency=c['ai_urgency'],
+                status=c['status'],
+                address=c.get('address', 'N/A'),
+                created_at=c.get('created_at', '')
+            )
+
+            with st.expander(f"Actions — #CMP-{c['id']:04d}"):
+                act_col1, act_col2, act_col3 = st.columns(3)
+
+                with act_col1:
+                    if c['status'] == 'Pending':
+                        if st.button("▶️ Start Work", key=f"w_start_{c['id']}"):
+                            if update_complaint_status(c['id'], "In Progress",
+                                                      worker_id, "Worker started work"):
+                                styled_success("Status → In Progress")
+                                st.rerun()
+
+                with act_col2:
+                    if c['status'] in ['Pending', 'In Progress']:
+                        if st.button("✅ Mark Resolved", key=f"w_resolve_{c['id']}"):
+                            notes = st.session_state.get(f"w_resolve_notes_{c['id']}", "")
+                            if update_complaint_status(c['id'], "Resolved",
+                                                      worker_id, notes or "Issue resolved"):
+                                styled_success("Status → Resolved")
+                                st.rerun()
+
+                with act_col3:
+                    if c['status'] == 'In Progress':
+                        if st.button("⏸️ Pause", key=f"w_pause_{c['id']}"):
+                            if update_complaint_status(c['id'], "Pending",
+                                                      worker_id, "Paused by worker"):
+                                styled_info("Status → Pending")
+                                st.rerun()
+
+                # Resolution notes
+                if c['status'] in ['Pending', 'In Progress']:
+                    st.text_input("Resolution notes", key=f"w_resolve_notes_{c['id']}",
+                                  placeholder="Add notes about the resolution...")

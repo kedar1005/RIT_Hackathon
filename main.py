@@ -22,9 +22,9 @@ from utils.data_utils import init_database
 from utils.ui_utils import inject_global_css, sidebar_logo
 from dashboard.landing import show_landing_page
 from dashboard.user_dashboard import show_user_dashboard
-from dashboard.agent_dashboard import show_agent_dashboard
+from dashboard.agent_dashboard import show_agent_dashboard, show_worker_dashboard
 from auth.user_auth import show_user_auth
-from auth.agent_auth import show_agent_auth
+from auth.agent_auth import show_agent_auth, show_worker_auth
 
 # ─── INITIALIZATION ──────────────────────────────────────────────────
 # Create necessary directories
@@ -65,6 +65,20 @@ if st.session_state.authenticated:
                 color:#F0F4FF;margin-top:2px;">{user.get('name', 'User')}</div>
             <div style="font-family:'JetBrains Mono',monospace;font-size:10px;
                 color:#4A5568;margin-top:2px;">{user.get('email', '')}</div>
+        </div>
+        """, unsafe_allow_html=True)
+    elif user_type == 'worker':
+        st.sidebar.markdown(f"""
+        <div style="padding:0.75rem;background:rgba(0,212,255,0.05);
+            border:1px solid rgba(0,212,255,0.15);border-radius:8px;margin-bottom:1rem;">
+            <div style="font-family:'DM Sans',sans-serif;font-size:11px;color:#8B98B8;
+                letter-spacing:0.04em;text-transform:uppercase;">👷 WORKER</div>
+            <div style="font-family:'Sora',sans-serif;font-size:14px;font-weight:600;
+                color:#F0F4FF;margin-top:2px;">{user.get('name', 'Worker')}</div>
+            <div style="font-family:'JetBrains Mono',monospace;font-size:10px;
+                color:#00D4FF;margin-top:2px;">{user.get('agent_id', '')}</div>
+            <div style="font-family:'DM Sans',sans-serif;font-size:10px;
+                color:#4A5568;margin-top:2px;">{user.get('department', '')}</div>
         </div>
         """, unsafe_allow_html=True)
     else:
@@ -121,6 +135,7 @@ if st.session_state.authenticated:
         st.session_state.authenticated = False
         st.session_state.user_type = None
         st.session_state.current_user = {}
+        st.session_state.is_admin = False
         st.session_state.page = 'landing'
         st.rerun()
 
@@ -141,8 +156,11 @@ else:
     if st.sidebar.button("🏛️ Citizen Portal", use_container_width=True):
         st.session_state.page = 'user_auth'
         st.rerun()
-    if st.sidebar.button("🛡️ Agent Portal", use_container_width=True):
+    if st.sidebar.button("🛡️ Admin Login", use_container_width=True):
         st.session_state.page = 'agent_auth'
+        st.rerun()
+    if st.sidebar.button("👷 Worker Login", use_container_width=True):
+        st.session_state.page = 'worker_auth'
         st.rerun()
 
 
@@ -163,6 +181,12 @@ elif page == 'agent_auth':
         show_agent_dashboard()
     else:
         show_agent_auth()
+
+elif page == 'worker_auth':
+    if st.session_state.authenticated and st.session_state.user_type == 'worker':
+        show_worker_dashboard()
+    else:
+        show_worker_auth()
 
 else:
     show_landing_page()

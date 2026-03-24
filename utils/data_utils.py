@@ -389,7 +389,7 @@ def update_complaint_status(complaint_id, new_status, agent_id=None, notes=None)
 
 
 def search_complaints(term=None, status_filter=None, urgency_filter=None,
-                      category_filter=None):
+                      category_filter=None, department_filter=None):
     """Search and filter complaints."""
     try:
         conn = get_connection()
@@ -409,6 +409,9 @@ def search_complaints(term=None, status_filter=None, urgency_filter=None,
         if category_filter and category_filter != "All":
             query += " AND category = ?"
             params.append(category_filter)
+        if department_filter:
+            query += " AND category = ?"
+            params.append(department_filter)
 
         query += """
             ORDER BY
