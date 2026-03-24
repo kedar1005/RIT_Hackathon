@@ -224,6 +224,10 @@ def init_database():
         cursor.execute("ALTER TABLE tickets ADD COLUMN is_read_citizen INTEGER DEFAULT 0")
     except Exception:
         pass
+    try:
+        cursor.execute("ALTER TABLE tickets ADD COLUMN completion_image TEXT")
+    except Exception:
+        pass
 
     conn.commit()
     conn.close()
@@ -465,9 +469,9 @@ def update_complaint_status(complaint_id, new_status, agent_id=None, notes=None,
                 
                 # Add notification ticket for citizen
                 cursor.execute(
-                    """INSERT INTO tickets (complaint_id, user_id, message, department, status, is_read_worker, is_read_admin)
-                       VALUES (?, ?, ?, ?, 'Closed', 1, 1)""",
-                    (complaint_id, comp['user_id'], msg, comp['department'],)
+                    """INSERT INTO tickets (complaint_id, user_id, message, department, status, is_read_worker, is_read_admin, completion_image)
+                       VALUES (?, ?, ?, ?, 'Closed', 1, 1, ?)""",
+                    (complaint_id, comp['user_id'], msg, comp['department'], completion_image)
                 )
 
         cursor.execute("""
@@ -663,48 +667,76 @@ def save_model_version(version_num, total_samples, real_samples, accuracy,
 
 # ─── STATISTICS & ANALYTICS ───────────────────────────────────────────
 
-def get_complaint_stats():
-    """Get aggregated complaint statistics."""
+def get_complaint_stats(department=None):
+    """Get aggregated complaint statistics, optionally filtered by department."""
     try:
         conn = get_connection()
         cursor = conn.cursor()
         stats = {}
+        
+        where_clause = ""
+        params = []
+        if department:
+            where_clause = " WHERE TRIM(LOWER(department)) = TRIM(LOWER(?))"
+            params = [department]
 
-        cursor.execute("SELECT COUNT(*) as total FROM complaints")
+        cursor.execute(f"SELECT COUNT(*) as total FROM complaints{where_clause}", params)
         stats["total"] = cursor.fetchone()["total"]
 
         for status in ["Pending", "In Progress", "Resolved"]:
-            cursor.execute(
-                "SELECT COUNT(*) as cnt FROM complaints WHERE status = ?", (status,)
-            )
+            status_clause = " WHERE status = ?"
+            status_params = [status]
+            if department:
+                status_clause += " AND TRIM(LOWER(department)) = TRIM(LOWER(?))"
+                status_params.append(department)
+                
+            cursor.execute(f"SELECT COUNT(*) as cnt FROM complaints{status_clause}", status_params)
             stats[status.lower().replace(" ", "_")] = cursor.fetchone()["cnt"]
 
         for urgency in ["High", "Medium", "Low"]:
-            cursor.execute(
-                "SELECT COUNT(*) as cnt FROM complaints WHERE ai_urgency = ?", (urgency,)
-            )
+            urgency_clause = " WHERE ai_urgency = ?"
+            urgency_params = [urgency]
+            if department:
+                urgency_clause += " AND TRIM(LOWER(department)) = TRIM(LOWER(?))"
+                urgency_params.append(department)
+                
+            cursor.execute(f"SELECT COUNT(*) as cnt FROM complaints{urgency_clause}", urgency_params)
             stats[f"urgency_{urgency.lower()}"] = cursor.fetchone()["cnt"]
 
         # Average resolution time in hours
-        cursor.execute("""
+        res_clause = " WHERE resolved_at IS NOT NULL"
+        res_params = []
+        if department:
+            res_clause += " AND TRIM(LOWER(department)) = TRIM(LOWER(?))"
+            res_params.append(department)
+
+        cursor.execute(f"""
             SELECT AVG(
                 (julianday(resolved_at) - julianday(created_at)) * 24
             ) as avg_hours
-            FROM complaints WHERE resolved_at IS NOT NULL
-        """)
+            FROM complaints{res_clause}
+        """, res_params)
         row = cursor.fetchone()
         stats["avg_resolution_hours"] = round(row["avg_hours"], 1) if row["avg_hours"] else 0
 
         # Today's resolved
-        cursor.execute(
-            "SELECT COUNT(*) as cnt FROM complaints WHERE status='Resolved' AND date(resolved_at) = date('now')"
-        )
+        today_clause = " WHERE status='Resolved' AND date(resolved_at) = date('now')"
+        today_params = []
+        if department:
+            today_clause += " AND TRIM(LOWER(department)) = TRIM(LOWER(?))"
+            today_params.append(department)
+
+        cursor.execute(f"SELECT COUNT(*) as cnt FROM complaints{today_clause}", today_params)
         stats["resolved_today"] = cursor.fetchone()["cnt"]
 
         # Category breakdown
-        cursor.execute(
-            "SELECT category, COUNT(*) as count FROM complaints GROUP BY category ORDER BY count DESC"
-        )
+        breakdown_clause = ""
+        breakdown_params = []
+        if department:
+            breakdown_clause = " WHERE TRIM(LOWER(department)) = TRIM(LOWER(?))"
+            breakdown_params = [department]
+
+        cursor.execute(f"SELECT category, COUNT(*) as count FROM complaints{breakdown_clause} GROUP BY category ORDER BY count DESC", breakdown_params)
         stats["by_category"] = [dict(r) for r in cursor.fetchall()]
 
         conn.close()
@@ -1247,14 +1279,19 @@ def restore_worker(agent_id):
         return False
 
 
-def get_pending_workers():
-    """Return all workers with pending status."""
+def get_pending_workers(department=None):
+    """Return all workers with pending status, optionally filtered by department."""
     try:
         conn = get_connection()
         cursor = conn.cursor()
-        cursor.execute(
-            "SELECT * FROM agents WHERE status = 'pending' ORDER BY created_at DESC"
-        )
+        query = "SELECT * FROM agents WHERE status = 'pending'"
+        params = []
+        if department:
+            query += " AND TRIM(LOWER(department)) = TRIM(LOWER(?))"
+            params.append(department)
+        query += " ORDER BY created_at DESC"
+        
+        cursor.execute(query, params)
         rows = [dict(r) for r in cursor.fetchall()]
         conn.close()
         return rows

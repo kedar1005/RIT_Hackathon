@@ -887,7 +887,7 @@ def supervisor_dashboard():
     status_filter = request.args.get("status", "All")
     urgency_filter = request.args.get("urgency", "All")
     category_filter = request.args.get("category", "All")
-    selected_dept = request.args.get("dept", "").strip() or None
+    selected_dept = g.current_user.get("department") if not g.is_admin else (request.args.get("dept", "").strip() or None)
     page = int(request.args.get("page", 1))
     per_page = 5
     
@@ -908,9 +908,9 @@ def supervisor_dashboard():
     
     return render_template(
         "supervisor_dashboard.html",
-        stats=get_complaint_stats(),
+        stats=get_complaint_stats(department=selected_dept),
         complaints=paginated_complaints,
-        pending_workers=get_pending_workers(),
+        pending_workers=get_pending_workers(department=selected_dept),
         categories=["All"] + CATEGORIES,
         departments=DEPARTMENTS,
         selected_status=status_filter,

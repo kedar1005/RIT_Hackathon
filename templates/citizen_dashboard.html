@@ -54,6 +54,11 @@
                     <div class="ticket-card">
                         <strong>Complaint #CMP-{{ "%04d"|format(ticket.complaint_id) }}</strong>
                         <p>{{ ticket.message }}</p>
+                        {% if ticket.completion_image %}
+                            <div class="completion-proof" style="margin-top: 0.8rem;">
+                                <img src="{{ url_for('static', filename=ticket.completion_image.replace('assets/', '')) }}" alt="Work Completion Proof" style="width: 100%; border-radius: 8px; border: 1px solid var(--line);">
+                            </div>
+                        {% endif %}
                         <small>{{ ticket.department }} • {{ ticket.created_at }}</small>
                     </div>
                 {% endfor %}

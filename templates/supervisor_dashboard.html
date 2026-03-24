@@ -8,7 +8,7 @@
         <p class="eyebrow">Oversight & Review</p>
         <h1>{{ selected_dept if selected_dept else "Supervisor Control Center" }}</h1>
     </div>
-    {% if selected_dept %}
+    {% if selected_dept and g.is_admin %}
         <a href="{{ url_for('supervisor_dashboard') }}" class="button button-secondary">← Back to Departments</a>
     {% endif %}
 </section>
@@ -23,22 +23,7 @@
 
 <section class="dashboard-grid">
     <div class="main-content">
-        {% if not selected_dept %}
-            <!-- Department Selection Grid -->
-            <article class="panel">
-                <p class="eyebrow">Complaint Queue</p>
-                <h2>Select a department to view complaints</h2>
-                <div class="dept-grid">
-                    {% for dept in departments %}
-                        <a href="{{ url_for('supervisor_dashboard', dept=dept) }}" class="dept-card">
-                            <div class="dept-icon">{{ dept[0] }}</div>
-                            <h3>{{ dept }}</h3>
-                            <p class="muted">View assigned complaints</p>
-                        </a>
-                    {% endfor %}
-                </div>
-            </article>
-        {% else %}
+        <!-- Filterable Complaint List for Supervisor's Department -->
             <!-- Filterable Complaint List for Selected Department -->
             <article class="panel">
                 <p class="eyebrow">{{ selected_dept }} Queue</p>
@@ -79,6 +64,13 @@
                             </div>
                             <p>{{ complaint.description }}</p>
                             <small>{{ complaint.address }} • {{ complaint.created_at }}</small>
+                            
+                            {% if complaint.completion_image %}
+                                <div class="completion-proof top-space">
+                                    <p class="eyebrow" style="margin-bottom: 0.5rem; color: #10b981;">✅ Completion Proof</p>
+                                    <img src="{{ url_for('static', filename=complaint.completion_image.replace('assets/', '')) }}" alt="Work Completion Proof" style="width: 100%; border-radius: 12px; border: 1px solid #10b981;">
+                                </div>
+                            {% endif %}
                             
                             <form method="post" action="{{ url_for('admin_update_complaint', complaint_id=complaint.id) }}" class="inline-form inline-form-wide">
                                 <select name="status" required>
@@ -129,7 +121,6 @@
                     </div>
                 {% endif %}
             </article>
-        {% endif %}
     </div>
 
     <!-- Side Panel: Pending Reviews (Always Visible) -->
