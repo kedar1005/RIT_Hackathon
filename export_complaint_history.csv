@@ -1,0 +1,75 @@
+id,complaint_id,old_status,new_status,changed_by,change_reason,changed_at
+1,1,,Pending,user_1,Complaint submitted,2026-03-20T23:01:18.714929
+2,2,,Pending,user_2,Complaint submitted,2026-03-20T23:01:18.726492
+3,3,,Pending,user_3,Complaint submitted,2026-03-20T23:01:18.732004
+4,4,,Pending,user_4,Complaint submitted,2026-03-20T23:01:18.740707
+5,5,,Pending,user_5,Complaint submitted,2026-03-20T23:01:18.748200
+6,6,,Pending,user_1,Complaint submitted,2026-03-20T23:01:18.754841
+7,7,,Pending,user_2,Complaint submitted,2026-03-20T23:01:18.760483
+8,8,,Pending,user_3,Complaint submitted,2026-03-20T23:01:18.769328
+9,9,,Pending,user_4,Complaint submitted,2026-03-20T23:01:18.773967
+10,10,,Pending,user_5,Complaint submitted,2026-03-20T23:01:18.783117
+11,11,,Pending,user_1,Complaint submitted,2026-03-20T23:01:18.792466
+12,12,,Pending,user_2,Complaint submitted,2026-03-20T23:01:18.800071
+13,13,,Pending,user_3,Complaint submitted,2026-03-20T23:01:18.806456
+14,14,,Pending,user_4,Complaint submitted,2026-03-20T23:01:18.814274
+15,15,,Pending,user_5,Complaint submitted,2026-03-20T23:01:18.819567
+16,16,,Pending,user_1,Complaint submitted,2026-03-20T23:01:18.829983
+17,17,,Pending,user_2,Complaint submitted,2026-03-20T23:01:18.839941
+18,18,,Pending,user_3,Complaint submitted,2026-03-20T23:01:18.847598
+19,19,,Pending,user_4,Complaint submitted,2026-03-20T23:01:18.852486
+20,20,,Pending,user_5,Complaint submitted,2026-03-20T23:01:18.860546
+21,3,Pending,In Progress,AGT0001,Agent assigned and investigating,2026-03-20T23:01:18.864848
+22,4,Pending,In Progress,AGT0001,Agent assigned and investigating,2026-03-20T23:01:18.874216
+23,5,Pending,In Progress,AGT0001,Agent assigned and investigating,2026-03-20T23:01:18.880869
+24,6,Pending,In Progress,AGT0002,Work started,2026-03-20T23:01:18.885647
+25,6,In Progress,Resolved,AGT0002,Issue has been resolved. Team dispatched and work completed.,2026-03-20T23:01:18.894720
+26,7,Pending,In Progress,AGT0002,Work started,2026-03-20T23:01:18.901193
+27,7,In Progress,Resolved,AGT0002,Issue has been resolved. Team dispatched and work completed.,2026-03-20T23:01:18.907640
+28,8,Pending,In Progress,AGT0002,Work started,2026-03-20T23:01:18.914273
+29,8,In Progress,Resolved,AGT0002,Issue has been resolved. Team dispatched and work completed.,2026-03-20T23:01:18.919771
+30,18,Pending,In Progress,AGT0001,Agent started work,2026-03-20T23:24:57.442183
+31,20,Pending,Resolved,AGT0001,Issue resolved,2026-03-20T23:25:12.721796
+32,21,,Pending,user_6,Complaint submitted,2026-03-20T23:34:57.370952
+33,21,Pending,In Progress,AGT0001,Agent started work,2026-03-20T23:38:01.485830
+34,21,In Progress,Pending,AGT0001,Paused by agent,2026-03-20T23:39:08.172545
+35,21,Pending,Resolved,AGT0001,Work on it,2026-03-20T23:39:13.661834
+36,22,,Pending,user_1,Complaint submitted,2026-03-21T12:22:09.525610
+37,23,,Pending,user_1,Complaint submitted,2026-03-21T12:22:09.540863
+38,24,,Pending,user_1,Complaint submitted,2026-03-21T12:22:09.550593
+39,25,,Pending,user_1,Complaint submitted,2026-03-21T12:22:09.561332
+40,26,,Pending,user_1,Complaint submitted,2026-03-21T12:22:09.570373
+41,27,,Pending,user_1,Complaint submitted,2026-03-21T12:22:09.580876
+42,28,,Pending,user_1,Complaint submitted,2026-03-21T12:22:09.587031
+43,29,,Pending,user_1,Complaint submitted,2026-03-21T12:22:09.591533
+44,30,,Pending,user_1,Complaint submitted,2026-03-21T12:22:09.606722
+45,31,,Pending,user_1,Complaint submitted,2026-03-21T12:22:09.616210
+46,32,,Pending,user_1,Complaint submitted,2026-03-21T12:22:09.627058
+47,33,,Pending,user_1,Complaint submitted,2026-03-21T12:22:09.635678
+48,34,,Pending,user_1,Complaint submitted,2026-03-21T12:22:09.643061
+49,35,,Pending,user_1,Complaint submitted,2026-03-21T12:22:09.652869
+50,36,,Pending,user_1,Complaint submitted,2026-03-21T12:22:09.661385
+51,37,,Pending,user_1,Complaint submitted,2026-03-21T12:22:09.669732
+52,38,,Pending,user_1,Complaint submitted,2026-03-21T12:22:09.677030
+53,39,,Pending,user_1,Complaint submitted,2026-03-21T12:22:09.691416
+54,40,,Pending,user_1,Complaint submitted,2026-03-21T12:22:09.699030
+55,41,,Pending,user_1,Complaint submitted,2026-03-21T12:22:09.707350
+56,24,Pending,In Progress,AGT0001,Agent assigned and investigating,2026-03-21T12:22:09.720196
+57,25,Pending,In Progress,AGT0001,Agent assigned and investigating,2026-03-21T12:22:09.727925
+58,26,Pending,In Progress,AGT0001,Agent assigned and investigating,2026-03-21T12:22:09.740269
+59,27,Pending,In Progress,AGT0002,Work started,2026-03-21T12:22:09.750974
+60,27,In Progress,Resolved,AGT0002,Issue has been resolved. Team dispatched and work completed.,2026-03-21T12:22:09.761260
+61,28,Pending,In Progress,AGT0002,Work started,2026-03-21T12:22:09.768339
+62,28,In Progress,Resolved,AGT0002,Issue has been resolved. Team dispatched and work completed.,2026-03-21T12:22:09.778643
+63,29,Pending,In Progress,AGT0002,Work started,2026-03-21T12:22:09.787354
+64,29,In Progress,Resolved,AGT0002,Issue has been resolved. Team dispatched and work completed.,2026-03-21T12:22:09.791753
+65,42,,Pending,user_1,Complaint submitted,2026-03-21T13:49:00.755162
+66,43,,Pending,user_7,Complaint submitted,2026-03-24T15:37:02.919838
+67,44,,Pending,user_8,Complaint submitted,2026-03-24T19:45:26.811433
+68,45,,Pending,user_8,Complaint submitted,2026-03-24T19:46:02.248516
+69,46,,Pending,user_9,Complaint submitted,2026-03-24T21:40:54.090884
+70,42,Pending,In Progress,AGT0010,Worker started work,2026-03-24T22:47:39.944556
+71,42,In Progress,Resolved,AGT0010,Issue resolved,2026-03-24T22:48:05.588550
+72,47,,Pending,user_9,Complaint submitted,2026-03-25T02:27:20.886536
+73,47,Pending,In Progress,AGT0010,Assigned by supervisor,2026-03-25T03:35:56.736578
+74,32,Pending,In Progress,AGT0004,Assigned by supervisor,2026-03-25T03:45:05.082996

@@ -1,0 +1,4 @@
+id,complaint_id,user_id,message,department,status,created_at,is_read_admin,is_read_worker,is_read_citizen,completion_image
+1,46,9,no action taken...,Roads & Infrastructure,Open,2026-03-24 16:11:36,1,1,1,
+2,42,1,"Your complaint #CMP-0042 (Roads & Potholes) has been resolved. 
+Note: Issue resolved",Roads & Infrastructure,Closed,2026-03-24 17:18:05,1,1,0,
