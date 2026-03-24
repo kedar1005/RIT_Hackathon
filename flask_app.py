@@ -6,13 +6,21 @@ from datetime import datetime
 from functools import wraps
 from io import BytesIO
 
-from flask import Flask, flash, g, redirect, render_template, request, send_file, session, url_for
+from flask import Flask, flash, g, redirect, render_template, request, send_file, send_from_directory, session, url_for
 from werkzeug.utils import secure_filename
 
 from auth.agent_auth import DEPARTMENTS
+from ml.model_tracker import (
+    get_agent_leaderboard_chart,
+    get_category_distribution_chart,
+    get_daily_trend_chart,
+    get_urgency_donut,
+)
 from ml.image_model import dual_predict
-from ml.model import CATEGORIES, predict_full
+from ml.model import CATEGORIES, check_and_retrain, predict_full
+from plotly.io import to_html
 from utils.data_utils import (
+    add_correction,
     add_agent,
     add_complaint,
     add_feedback,
@@ -27,13 +35,18 @@ from utils.data_utils import (
     export_complaints_csv,
     get_active_session,
     get_agent_leaderboard,
+    get_all_corrections,
     get_all_workers,
     get_connection,
     get_available_cities_with_coords,
+    get_complaint_by_id,
     get_complaint_stats,
     get_complaints_with_coords,
+    get_correction_count_since_last_training,
     get_daily_trend,
     get_departments_without_active_workers,
+    get_all_complaints,
+    get_model_versions,
     get_tickets_by_department,
     get_tickets_for_admin,
     get_unread_count_admin,
@@ -76,6 +89,7 @@ CATEGORY_TO_DEPT = {
 app = Flask(__name__)
 app.config["SECRET_KEY"] = os.environ.get("FLASK_SECRET_KEY", "citizen-ai-flask-dev")
 app.config["MAX_CONTENT_LENGTH"] = 10 * 1024 * 1024
+PAGE_SIZE = 5
 
 
 def _hash_password(password):
@@ -132,6 +146,66 @@ def _serialize_map_points(points):
         }
         for point in points
     ])
+
+
+def _build_media_url(path_value):
+    if not path_value:
+        return None
+    normalized = os.path.abspath(path_value)
+    if not normalized.startswith(os.path.abspath(UPLOAD_DIR)):
+        return None
+    filename = os.path.basename(normalized)
+    return url_for("uploaded_media", filename=filename)
+
+
+def _human_duration(started_at, completed_at=None):
+    if not started_at:
+        return None
+    try:
+        start_dt = datetime.fromisoformat(started_at)
+        end_dt = datetime.fromisoformat(completed_at) if completed_at else datetime.now()
+        elapsed = end_dt - start_dt
+        total_minutes = max(int(elapsed.total_seconds() / 60), 0)
+        hours = total_minutes // 60
+        minutes = total_minutes % 60
+        return f"{hours}h {minutes}m" if hours else f"{minutes}m"
+    except Exception:
+        return None
+
+
+def _enrich_complaint(complaint):
+    detail = get_complaint_by_id(complaint["id"]) or complaint
+    detail["proof_url"] = _build_media_url(detail.get("completion_image"))
+    detail["complaint_image_url"] = _build_media_url(detail.get("image_path"))
+    detail["work_duration"] = _human_duration(detail.get("work_started_at"), detail.get("work_completed_at"))
+    return detail
+
+
+def _figure_html(fig):
+    if fig is None:
+        return None
+    try:
+        return to_html(fig, full_html=False, include_plotlyjs="cdn", config={"displayModeBar": False, "responsive": True})
+    except Exception:
+        return None
+
+
+def _paginate_items(items, page):
+    total_items = len(items)
+    total_pages = max((total_items + PAGE_SIZE - 1) // PAGE_SIZE, 1)
+    current_page = min(max(page, 1), total_pages)
+    start = (current_page - 1) * PAGE_SIZE
+    end = start + PAGE_SIZE
+    return {
+        "items": items[start:end],
+        "page": current_page,
+        "total_pages": total_pages,
+        "total_items": total_items,
+        "has_prev": current_page > 1,
+        "has_next": current_page < total_pages,
+        "prev_page": current_page - 1,
+        "next_page": current_page + 1,
+    }
 
 
 def login_required(role=None):
@@ -195,6 +269,11 @@ def inject_template_context():
 @app.route("/")
 def home():
     return render_template("index.html", stats=get_complaint_stats())
+
+
+@app.route("/media/<path:filename>")
+def uploaded_media(filename):
+    return send_from_directory(UPLOAD_DIR, filename)
 
 
 @app.route("/logout")
@@ -344,6 +423,11 @@ def worker_login():
 @app.route("/citizen/dashboard", methods=["GET", "POST"])
 @login_required(role="citizen")
 def citizen_dashboard():
+    status_filter = request.args.get("status", "All")
+    urgency_filter = request.args.get("urgency", "All")
+    search_term = request.args.get("term", "").strip().lower()
+    page = request.args.get("page", default=1, type=int)
+
     if request.method == "POST":
         category = request.form.get("category", "").strip()
         user_urgency = request.form.get("user_urgency", "Medium").strip()
@@ -402,7 +486,24 @@ def citizen_dashboard():
             flash("The complaint could not be saved. Please try again.", "error")
 
     complaints = get_user_complaints(g.current_user["id"])
+    filtered_complaints = complaints
+    if status_filter != "All":
+        filtered_complaints = [c for c in filtered_complaints if c.get("status") == status_filter]
+    if urgency_filter != "All":
+        filtered_complaints = [c for c in filtered_complaints if c.get("ai_urgency") == urgency_filter]
+    if search_term:
+        filtered_complaints = [
+            c for c in filtered_complaints
+            if search_term in (c.get("description") or "").lower()
+            or search_term in (c.get("category") or "").lower()
+            or search_term in (c.get("address") or "").lower()
+        ]
+    pagination = _paginate_items(filtered_complaints, page)
+    complaint_details = {complaint["id"]: _enrich_complaint(complaint) for complaint in complaints}
     tickets = get_user_tickets(g.current_user["id"])
+    for ticket in tickets:
+        detail = get_complaint_by_id(ticket.get("complaint_id")) if ticket.get("complaint_id") else None
+        ticket["proof_url"] = _build_media_url(detail.get("completion_image")) if detail else None
     unread_tickets = get_unread_count_user(g.current_user["id"])
     if unread_tickets:
         mark_tickets_read_user(g.current_user["id"])
@@ -411,9 +512,20 @@ def citizen_dashboard():
         "citizen_dashboard.html",
         categories=CATEGORIES,
         urgencies=URGENCY_OPTIONS,
-        complaints=complaints,
+        complaints=pagination["items"],
+        complaint_stats={
+            "total": len(complaints),
+            "pending": len([c for c in complaints if c.get("status") == "Pending"]),
+            "in_progress": len([c for c in complaints if c.get("status") == "In Progress"]),
+            "resolved": len([c for c in complaints if c.get("status") == "Resolved"]),
+        },
+        complaint_details=complaint_details,
         tickets=tickets,
         unread_tickets=unread_tickets,
+        selected_status=status_filter,
+        selected_urgency=urgency_filter,
+        search_term=search_term,
+        pagination=pagination,
     )
 
 
@@ -459,15 +571,36 @@ def admin_dashboard():
     city_filter = request.args.get("city", "All")
     date_from = request.args.get("date_from", "").strip() or None
     date_to = request.args.get("date_to", "").strip() or None
+    page = request.args.get("page", default=1, type=int)
     unread_admin = get_unread_count_admin()
     if unread_admin:
         mark_tickets_read_admin()
 
+    complaints = search_complaints(
+        term=term,
+        status_filter=status_filter,
+        urgency_filter=urgency_filter,
+        category_filter=category_filter,
+    )
+    pagination = _paginate_items(complaints, page)
+    complaint_details = {complaint["id"]: _enrich_complaint(complaint) for complaint in complaints}
+    tickets = get_tickets_for_admin()
+    for ticket in tickets:
+        detail = get_complaint_by_id(ticket.get("complaint_id")) if ticket.get("complaint_id") else None
+        ticket["proof_url"] = _build_media_url(detail.get("completion_image")) if detail else None
+
+    stats = get_complaint_stats()
+    daily_trend = get_daily_trend(30)
+    leaderboard = get_agent_leaderboard()
+    avg_resolution_hours = stats.get("avg_resolution_hours", 0)
+    avg_resolution_display = f"{avg_resolution_hours/24:.1f}d" if avg_resolution_hours > 24 else f"{avg_resolution_hours:.0f}h"
+
     return render_template(
         "admin_dashboard.html",
-        stats=get_complaint_stats(),
-        complaints=search_complaints(term=term, status_filter=status_filter, urgency_filter=urgency_filter, category_filter=category_filter),
-        tickets=get_tickets_for_admin(),
+        stats=stats,
+        complaints=pagination["items"],
+        complaint_details=complaint_details,
+        tickets=tickets,
         unread_admin=unread_admin,
         map_points_json=_serialize_map_points(get_complaints_with_coords(city_filter=city_filter, date_from=date_from, date_to=date_to)),
         cities=get_available_cities_with_coords(),
@@ -479,12 +612,27 @@ def admin_dashboard():
         selected_category=category_filter,
         search_term=term,
         categories=["All"] + CATEGORIES,
-        trend=get_daily_trend(30),
-        leaderboard=get_agent_leaderboard(),
+        trend=daily_trend,
+        leaderboard=leaderboard,
         workers=get_all_workers(),
         departments=DEPARTMENTS,
         missing_departments=get_departments_without_active_workers(),
         pending_count=len(get_pending_workers()),
+        correction_count=get_correction_count_since_last_training(),
+        model_versions=list(reversed(get_model_versions())),
+        recent_corrections=get_all_corrections()[:12],
+        pagination=pagination,
+        analytics_category_chart=_figure_html(get_category_distribution_chart(stats.get("by_category", []))) if stats.get("by_category") else None,
+        analytics_urgency_chart=_figure_html(
+            get_urgency_donut(
+                stats.get("urgency_high", 0),
+                stats.get("urgency_medium", 0),
+                stats.get("urgency_low", 0),
+            )
+        ),
+        analytics_daily_chart=_figure_html(get_daily_trend_chart(daily_trend)) if daily_trend else None,
+        analytics_leaderboard_chart=_figure_html(get_agent_leaderboard_chart(leaderboard)) if leaderboard else None,
+        analytics_avg_resolution=avg_resolution_display,
     )
 
 
@@ -495,15 +643,70 @@ def admin_update_complaint(complaint_id):
         flash("Admin access is required.", "error")
         return redirect(url_for("home"))
 
+    status_value = request.form.get("status", "").strip()
+    proof_path = None
+    proof_file = request.files.get("proof_image")
+    if status_value == "Resolved" and proof_file and proof_file.filename:
+        proof_path, _ = _save_uploaded_image(proof_file, complaint_id)
+
     success = update_complaint_status(
         complaint_id,
-        request.form.get("status", "").strip(),
+        status_value,
         agent_id=g.current_user.get("agent_id"),
         notes=request.form.get("notes", "").strip(),
-        work_started_at=datetime.now().isoformat() if request.form.get("status") == "In Progress" else None,
-        work_completed_at=datetime.now().isoformat() if request.form.get("status") == "Resolved" else None,
+        work_started_at=datetime.now().isoformat() if status_value == "In Progress" else None,
+        work_completed_at=datetime.now().isoformat() if status_value == "Resolved" else None,
+        completion_image=proof_path,
     )
     flash("Complaint updated." if success else "Complaint update failed.", "success" if success else "error")
+    return redirect(url_for("admin_dashboard"))
+
+
+@app.route("/admin/complaints/<int:complaint_id>/correction", methods=["POST"])
+@login_required(role="agent")
+def admin_submit_correction(complaint_id):
+    if not g.is_admin:
+        flash("Admin access is required.", "error")
+        return redirect(url_for("home"))
+
+    complaint = get_complaint_by_id(complaint_id)
+    if not complaint:
+        flash("Complaint not found.", "error")
+        return redirect(url_for("admin_dashboard"))
+
+    success = add_correction(
+        complaint_id=complaint_id,
+        original_prediction=complaint.get("category"),
+        corrected_label=request.form.get("corrected_category", "").strip(),
+        original_urgency=complaint.get("ai_urgency"),
+        corrected_urgency=request.form.get("corrected_urgency", "").strip(),
+        corrected_by=g.current_user.get("agent_id"),
+        image_path=complaint.get("image_path"),
+        description=complaint.get("description"),
+        category=request.form.get("corrected_category", "").strip(),
+    )
+    flash("AI correction recorded." if success else "AI correction failed.", "success" if success else "error")
+    return redirect(url_for("admin_dashboard"))
+
+
+@app.route("/admin/ai/retrain", methods=["POST"])
+@login_required(role="agent")
+def admin_retrain_ai():
+    if not g.is_admin:
+        flash("Admin access is required.", "error")
+        return redirect(url_for("home"))
+
+    result = check_and_retrain()
+    if result.get("retrained"):
+        flash(
+            f"Model retrained to version {result['version']} with {result['new_accuracy'] * 100:.1f}% accuracy.",
+            "success",
+        )
+    else:
+        flash(
+            result.get("error") or f"Retraining not triggered yet. Corrections: {result.get('correction_count', 0)}/15.",
+            "info",
+        )
     return redirect(url_for("admin_dashboard"))
 
 
@@ -553,7 +756,7 @@ def admin_unblock_worker(agent_id):
         flash("Admin access is required.", "error")
         return redirect(url_for("home"))
 
-    success = unblock_worker(agent_id)
+    success = restore_worker(agent_id)
     flash("Worker unblocked." if success else "Worker could not be unblocked.", "success" if success else "error")
     return redirect(url_for("admin_dashboard"))
 
@@ -614,24 +817,35 @@ def worker_dashboard():
     term = request.args.get("term", "").strip()
     status_filter = request.args.get("status", "All")
     urgency_filter = request.args.get("urgency", "All")
+    page = request.args.get("page", default=1, type=int)
     unread_worker = get_unread_count_worker(g.current_user.get("department"))
     if unread_worker:
         mark_tickets_read_worker(g.current_user.get("department"))
 
+    complaints = search_complaints(
+        term=term,
+        status_filter=status_filter,
+        urgency_filter=urgency_filter,
+        department_filter=g.current_user.get("department"),
+    )
+    pagination = _paginate_items(complaints, page)
+    complaint_details = {complaint["id"]: _enrich_complaint(complaint) for complaint in complaints}
+    tickets = get_tickets_by_department(g.current_user.get("department"))
+    for ticket in tickets:
+        detail = get_complaint_by_id(ticket.get("complaint_id")) if ticket.get("complaint_id") else None
+        ticket["proof_url"] = _build_media_url(detail.get("completion_image")) if detail else None
+
     return render_template(
         "worker_dashboard.html",
-        complaints=search_complaints(
-            term=term,
-            status_filter=status_filter,
-            urgency_filter=urgency_filter,
-            assigned_agent_filter=g.current_user.get("agent_id"),
-        ),
-        tickets=get_tickets_by_department(g.current_user.get("department")),
+        complaints=pagination["items"],
+        complaint_details=complaint_details,
+        tickets=tickets,
         unread_worker=unread_worker,
         selected_status=status_filter,
         selected_urgency=urgency_filter,
         search_term=term,
         is_pending=is_pending,
+        pagination=pagination,
     )
 
 
@@ -731,6 +945,16 @@ def worker_update_complaint(complaint_id):
         return redirect(url_for("worker_dashboard"))
 
     status_value = request.form.get("status", "").strip()
+    proof_path = None
+    proof_file = request.files.get("proof_image")
+    existing_detail = get_complaint_by_id(complaint_id)
+    existing_proof = existing_detail.get("completion_image") if existing_detail else None
+    if status_value == "Resolved" and not existing_proof and (not proof_file or not proof_file.filename):
+        flash("Please upload a photo as proof of work before resolving the complaint.", "error")
+        return redirect(url_for("worker_dashboard"))
+    if status_value == "Resolved" and proof_file and proof_file.filename:
+        proof_path, _ = _save_uploaded_image(proof_file, complaint_id)
+
     success = update_complaint_status(
         complaint_id,
         status_value,
@@ -738,6 +962,7 @@ def worker_update_complaint(complaint_id):
         notes=request.form.get("notes", "").strip(),
         work_started_at=datetime.now().isoformat() if status_value == "In Progress" else None,
         work_completed_at=datetime.now().isoformat() if status_value == "Resolved" else None,
+        completion_image=proof_path,
     )
     flash("Complaint updated." if success else "Complaint update failed.", "success" if success else "error")
     return redirect(url_for("worker_dashboard"))
