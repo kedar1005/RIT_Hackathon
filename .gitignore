@@ -1,3 +1,12 @@
 __pycache__/
-*.pyc
-db/*.db
+*.py[cod]
+*$py.class
+.ipynb_checkpoints/
+*.db
+.env
+.venv/
+env/
+venv/
+ENV/
+.idea/
+.vscode/
