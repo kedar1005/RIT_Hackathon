@@ -695,18 +695,79 @@ def export_complaints_csv(status_filter=None, category_filter=None,
         return pd.DataFrame()
 
 
-def get_complaints_with_coords():
-    """Get all complaints that have lat/lon coordinates for mapping."""
+def _extract_city_from_address(address):
+    """Best-effort city extraction from a free-form address string."""
+    if not address:
+        return None
+
+    parts = [part.strip() for part in str(address).split(",") if part.strip()]
+    if not parts:
+        return None
+
+    # Prefer the most city-like middle segment over country/pincode tails.
+    ignored_tokens = {
+        "india", "maharashtra", "mh", "state", "district"
+    }
+    for part in reversed(parts):
+        lower_part = part.lower()
+        if any(char.isdigit() for char in lower_part):
+            continue
+        if lower_part in ignored_tokens:
+            continue
+        return part
+
+    return parts[0]
+
+
+def get_available_cities_with_coords():
+    """Return sorted distinct city names inferred from complaint addresses."""
     try:
         conn = get_connection()
         cursor = conn.cursor()
         cursor.execute("""
+            SELECT address
+            FROM complaints
+            WHERE lat IS NOT NULL AND lon IS NOT NULL AND address IS NOT NULL
+        """)
+        rows = cursor.fetchall()
+        conn.close()
+
+        cities = {
+            city for row in rows
+            if (city := _extract_city_from_address(row["address"]))
+        }
+        return sorted(cities)
+    except Exception:
+        return []
+
+
+def get_complaints_with_coords(city_filter=None, date_from=None, date_to=None):
+    """Get map complaints filtered by city and created_at date range."""
+    try:
+        conn = get_connection()
+        cursor = conn.cursor()
+        query = """
             SELECT * FROM complaints
             WHERE lat IS NOT NULL AND lon IS NOT NULL
+        """
+        params = []
+
+        if city_filter and city_filter != "All":
+            query += " AND LOWER(address) LIKE LOWER(?)"
+            params.append(f"%{city_filter}%")
+        if date_from:
+            query += " AND date(created_at) >= date(?)"
+            params.append(str(date_from))
+        if date_to:
+            query += " AND date(created_at) <= date(?)"
+            params.append(str(date_to))
+
+        query += """
             ORDER BY
                 CASE ai_urgency WHEN 'High' THEN 1 WHEN 'Medium' THEN 2 WHEN 'Low' THEN 3 ELSE 4 END,
                 created_at DESC
-        """)
+        """
+        cursor.execute(query, params)
         rows = [dict(r) for r in cursor.fetchall()]
         conn.close()
         return rows

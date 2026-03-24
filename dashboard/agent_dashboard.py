@@ -14,7 +14,7 @@ from utils.ui_utils import (
 from utils.data_utils import (
     get_all_complaints, search_complaints, update_complaint_status,
     add_correction, get_correction_count_since_last_training,
-    get_complaint_stats, get_complaints_with_coords,
+    get_complaint_stats, get_complaints_with_coords, get_available_cities_with_coords,
     export_complaints_csv, get_model_versions, get_all_corrections,
     get_agent_leaderboard, get_daily_trend, add_agent,
     get_tickets_for_admin, get_unread_count_admin, mark_tickets_read_admin,
@@ -220,13 +220,38 @@ def show_agent_dashboard():
                        "Real-time geographic distribution of complaints",
                        accent="green")
 
-        map_complaints = get_complaints_with_coords()
+        city_options = ["All"] + get_available_cities_with_coords()
+        default_end = datetime.now().date()
+        default_start = default_end.replace(day=1)
+
+        map_filter_col1, map_filter_col2, map_filter_col3 = st.columns([1.2, 1, 1])
+        with map_filter_col1:
+            selected_city = st.selectbox("City", city_options, key="map_city_filter")
+        with map_filter_col2:
+            date_from = st.date_input("From Date", value=default_start, key="map_date_from")
+        with map_filter_col3:
+            date_to = st.date_input("To Date", value=default_end, key="map_date_to")
+
+        if date_from > date_to:
+            styled_error("Map filter error: 'From Date' cannot be after 'To Date'.")
+            map_complaints = []
+        else:
+            map_complaints = get_complaints_with_coords(
+                city_filter=selected_city,
+                date_from=date_from,
+                date_to=date_to
+            )
 
         if not map_complaints:
-            empty_state("No geotagged complaints yet. Submit complaints with GPS-enabled photos!",
+            empty_state("No geotagged complaints found for the selected city/date filters.",
                         icon="🗺️")
-            styled_info("Complaints with GPS coordinates or geocoded addresses will appear on the map.")
+            styled_info("Try a different city or widen the date range.")
         else:
+            styled_info(
+                f"Showing {len(map_complaints)} mapped complaints for "
+                f"{selected_city if selected_city != 'All' else 'all cities'} "
+                f"from {date_from} to {date_to}."
+            )
             view_mode = st.radio("View Mode", ["📍 Markers", "🔥 Heatmap"],
                                  horizontal=True, key="map_view")
 
