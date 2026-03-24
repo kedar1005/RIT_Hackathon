@@ -1,0 +1,236 @@
+{% extends "base.html" %}
+
+{% block title %}Supervisor Dashboard{% endblock %}
+
+{% block content %}
+<section class="dashboard-header">
+    <div class="header-main">
+        <p class="eyebrow">Oversight & Review</p>
+        <h1>{{ selected_dept if selected_dept else "Supervisor Control Center" }}</h1>
+    </div>
+    {% if selected_dept %}
+        <a href="{{ url_for('supervisor_dashboard') }}" class="button button-secondary">← Back to Departments</a>
+    {% endif %}
+</section>
+
+<!-- Metrics Summary -->
+<section class="card-grid card-grid-4 top-space">
+    <article class="metric-card"><span>Total</span><strong>{{ stats.total }}</strong></article>
+    <article class="metric-card"><span>Pending</span><strong>{{ stats.pending }}</strong></article>
+    <article class="metric-card"><span>In Progress</span><strong>{{ stats.in_progress }}</strong></article>
+    <article class="metric-card"><span>Resolved</span><strong>{{ stats.resolved }}</strong></article>
+</section>
+
+<section class="dashboard-grid">
+    <div class="main-content">
+        {% if not selected_dept %}
+            <!-- Department Selection Grid -->
+            <article class="panel">
+                <p class="eyebrow">Complaint Queue</p>
+                <h2>Select a department to view complaints</h2>
+                <div class="dept-grid">
+                    {% for dept in departments %}
+                        <a href="{{ url_for('supervisor_dashboard', dept=dept) }}" class="dept-card">
+                            <div class="dept-icon">{{ dept[0] }}</div>
+                            <h3>{{ dept }}</h3>
+                            <p class="muted">View assigned complaints</p>
+                        </a>
+                    {% endfor %}
+                </div>
+            </article>
+        {% else %}
+            <!-- Filterable Complaint List for Selected Department -->
+            <article class="panel">
+                <p class="eyebrow">{{ selected_dept }} Queue</p>
+                <h2>Search and monitoring</h2>
+                <form method="get" class="filter-grid">
+                    <input type="hidden" name="dept" value="{{ selected_dept }}">
+                    <input type="text" name="term" placeholder="Search complaints" value="{{ search_term }}">
+                    <select name="status">
+                        {% for option in ['All', 'Pending', 'In Progress', 'Resolved'] %}
+                            <option value="{{ option }}" {% if option == selected_status %}selected{% endif %}>{{ option }}</option>
+                        {% endfor %}
+                    </select>
+                    <select name="urgency">
+                        {% for option in ['All', 'High', 'Medium', 'Low'] %}
+                            <option value="{{ option }}" {% if option == selected_urgency %}selected{% endif %}>{{ option }}</option>
+                        {% endfor %}
+                    </select>
+                    <select name="category">
+                        {% for option in categories %}
+                            <option value="{{ option }}" {% if option == selected_category %}selected{% endif %}>{{ option }}</option>
+                        {% endfor %}
+                    </select>
+                    <button class="button button-secondary" type="submit">Apply Filters</button>
+                </form>
+
+                <div class="complaint-list">
+                    {% for complaint in complaints %}
+                        <article class="complaint-card">
+                            <div class="complaint-head">
+                                <div>
+                                    <strong>#CMP-{{ "%04d"|format(complaint.id) }}</strong>
+                                    <h3>{{ complaint.category }}</h3>
+                                </div>
+                                <div class="pill-row">
+                                    <span class="pill">{{ complaint.status }}</span>
+                                    <span class="pill pill-{{ complaint.ai_urgency|lower }}">{{ complaint.ai_urgency }}</span>
+                                </div>
+                            </div>
+                            <p>{{ complaint.description }}</p>
+                            <small>{{ complaint.address }} • {{ complaint.created_at }}</small>
+                            
+                            <form method="post" action="{{ url_for('admin_update_complaint', complaint_id=complaint.id) }}" class="inline-form inline-form-wide">
+                                <select name="status" required>
+                                    {% for option in ['Pending', 'In Progress', 'Resolved'] %}
+                                        <option value="{{ option }}" {% if option == complaint.status %}selected{% endif %}>{{ option }}</option>
+                                    {% endfor %}
+                                </select>
+                                <input type="text" name="notes" placeholder="Resolution notes">
+                                <button class="button button-secondary" type="submit">Save Status</button>
+                            </form>
+
+                            <form method="post" action="{{ url_for('supervisor_assign_worker', complaint_id=complaint.id) }}" class="inline-form inline-form-wide top-space">
+                                <input type="hidden" name="dept" value="{{ selected_dept }}">
+                                <select name="worker_id" required>
+                                    <option value="">Assign to Worker...</option>
+                                    {% for worker in dept_workers %}
+                                        <option value="{{ worker.agent_id }}" {% if complaint.assigned_agent == worker.agent_id %}selected{% endif %}>
+                                            {{ worker.name }} ({{ worker.agent_id }})
+                                        </option>
+                                    {% endfor %}
+                                </select>
+                                <span></span>
+                                <button class="button button-primary" type="submit">
+                                    {{ 'Re-assign' if complaint.assigned_agent else 'Assign' }}
+                                </button>
+                            </form>
+                        </article>
+                    {% else %}
+                        <p class="muted">No complaints found for this department.</p>
+                    {% endfor %}
+                </div>
+
+                {% if total_pages > 1 %}
+                    <div class="pagination top-space">
+                        {% if current_page > 1 %}
+                            <a href="{{ url_for('supervisor_dashboard', dept=selected_dept, page=current_page-1, term=search_term, status=selected_status, urgency=selected_urgency, category=selected_category) }}" class="button button-secondary">← Previous</a>
+                        {% else %}
+                            <span></span>
+                        {% endif %}
+                        
+                        <span class="pagination-info">Page <strong>{{ current_page }}</strong> of {{ total_pages }}</span>
+                        
+                        {% if current_page < total_pages %}
+                            <a href="{{ url_for('supervisor_dashboard', dept=selected_dept, page=current_page+1, term=search_term, status=selected_status, urgency=selected_urgency, category=selected_category) }}" class="button button-secondary">Next →</a>
+                        {% else %}
+                            <span></span>
+                        {% endif %}
+                    </div>
+                {% endif %}
+            </article>
+        {% endif %}
+    </div>
+
+    <!-- Side Panel: Pending Reviews (Always Visible) -->
+    <aside class="side-content">
+        <article class="panel">
+            <p class="eyebrow">Supervisor Review</p>
+            <h2>Pending Worker Reviews</h2>
+            <div class="stack compact-stack top-space">
+                {% for worker in pending_workers %}
+                    <article class="complaint-card review-card">
+                        <div class="complaint-head">
+                            <div>
+                                <strong>{{ worker.agent_id }}</strong>
+                                <h3>{{ worker.name }}</h3>
+                            </div>
+                            <div class="pill-row">
+                                <span class="pill pill-warning">PENDING</span>
+                            </div>
+                        </div>
+                        <p>{{ worker.department }}</p>
+                        <small>Warnings: {{ worker.warning_count }}</small>
+                        <div class="button-row top-space">
+                            <form method="post" action="{{ url_for('supervisor_restore', agent_id=worker.agent_id) }}" style="display:inline;">
+                                <button class="button button-success" type="submit">Restore</button>
+                            </form>
+                            <form method="post" action="{{ url_for('supervisor_block', agent_id=worker.agent_id) }}" style="display:inline;">
+                                <button class="button button-danger" type="submit">Block</button>
+                            </form>
+                        </div>
+                    </article>
+                {% else %}
+                    <div class="empty-state">
+                        <p class="muted">No workers currently under review.</p>
+                    </div>
+                {% endfor %}
+            </div>
+        </article>
+    </aside>
+</section>
+
+<style>
+    .dashboard-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-end;
+        margin-top: 1rem;
+    }
+    .dept-grid {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 1.5rem;
+        margin-top: 1.5rem;
+    }
+    .dept-card {
+        background: rgba(255, 255, 255, 0.4);
+        border: 1px solid rgba(255, 255, 255, 0.6);
+        padding: 2rem;
+        border-radius: 20px;
+        text-align: center;
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        cursor: pointer;
+        display: block;
+    }
+    .dept-card:hover {
+        background: rgba(255, 255, 255, 0.8);
+        transform: translateY(-5px);
+        box-shadow: 0 20px 40px rgba(0,0,0,0.05);
+        border-color: var(--primary);
+    }
+    .dept-icon {
+        width: 60px;
+        height: 60px;
+        margin: 0 auto 1.5rem;
+        background: linear-gradient(135deg, var(--primary), var(--accent));
+        color: white;
+        border-radius: 16px;
+        display: grid;
+        place-items: center;
+        font-size: 1.8rem;
+        font-weight: 800;
+        box-shadow: 0 10px 20px rgba(15, 118, 110, 0.2);
+    }
+    .dept-card h3 { margin: 0 0 0.5rem; color: var(--text); }
+    
+    .pagination {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding-top: 1.5rem;
+        border-top: 1px solid var(--line);
+    }
+    .pagination-info { font-weight: 700; color: var(--muted); }
+    
+    .button-success { background: #10b981; color: white; }
+    .button-danger { background: #ef4444; color: white; }
+    .pill-warning { background: #f59e0b; color: white; }
+    .top-space { margin-top: 1.5rem; }
+    .review-card { border-left: 4px solid #f59e0b; }
+    
+    @media (max-width: 768px) {
+        .dept-grid { grid-template-columns: 1fr; }
+    }
+</style>
+{% endblock %}

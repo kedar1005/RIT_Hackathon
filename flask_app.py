@@ -28,6 +28,7 @@ from utils.data_utils import (
     get_active_session,
     get_agent_leaderboard,
     get_all_workers,
+    get_connection,
     get_available_cities_with_coords,
     get_complaint_stats,
     get_complaints_with_coords,
@@ -49,6 +50,10 @@ from utils.data_utils import (
     unblock_worker,
     update_complaint_status,
     warn_worker,
+    block_worker,
+    restore_worker,
+    get_pending_workers,
+    get_workers_by_department,
 )
 from utils.geo_utils import extract_gps_from_image, geocode_address, get_image_hash_from_bytes
 
@@ -137,8 +142,9 @@ def login_required(role=None):
                 flash("Please sign in to continue.", "error")
                 return redirect(url_for("home"))
             if role and g.user_type != role:
-                flash("You do not have access to that page.", "error")
-                return redirect(url_for("home"))
+                if not (role == "supervisor" and g.is_admin):
+                    flash("You do not have access to that page.", "error")
+                    return redirect(url_for("home"))
             return view_func(*args, **kwargs)
 
         return wrapped
@@ -166,6 +172,13 @@ def load_current_user():
 
     g.current_user = active["user_data"]
     g.user_type = active["session_info"]["user_type"]
+    
+    # Map role to user_type if it's an agent/worker
+    if g.user_type in ["agent", "worker"]:
+        role = g.current_user.get("role")
+        if role:
+            g.user_type = role
+            
     g.is_admin = g.user_type == "agent" and g.current_user.get("agent_id") == "AGT0001"
 
 
@@ -312,8 +325,11 @@ def worker_login():
         else:
             agent = authenticate_agent(agent_id, _hash_password(password))
             if agent:
-                session["session_id"] = create_session(agent["id"], "worker", duration_minutes=60)
+                role = agent.get("role", "worker")
+                session["session_id"] = create_session(agent["id"], role, duration_minutes=60)
                 flash(f"Welcome, {agent['name']}.", "success")
+                if role == "supervisor":
+                    return redirect(url_for("supervisor_dashboard"))
                 return redirect(url_for("worker_dashboard"))
             flash("Invalid worker credentials.", "error")
 
@@ -468,6 +484,7 @@ def admin_dashboard():
         workers=get_all_workers(),
         departments=DEPARTMENTS,
         missing_departments=get_departments_without_active_workers(),
+        pending_count=len(get_pending_workers()),
     )
 
 
@@ -519,11 +536,11 @@ def admin_warn_worker(agent_id):
         flash("Admin access is required.", "error")
         return redirect(url_for("home"))
 
-    count, blocked = warn_worker(agent_id)
+    count, is_now_pending = warn_worker(agent_id)
     if count is None:
         flash("Worker warning could not be recorded.", "error")
-    elif blocked:
-        flash(f"{agent_id} has been blocked after {count} warnings.", "warning")
+    elif is_now_pending:
+        flash(f"{agent_id} has been moved to pending status after {count} warnings. A supervisor must review.", "warning")
     else:
         flash(f"Warning recorded for {agent_id}. Total warnings: {count}.", "success")
     return redirect(url_for("admin_dashboard"))
@@ -538,6 +555,27 @@ def admin_unblock_worker(agent_id):
 
     success = unblock_worker(agent_id)
     flash("Worker unblocked." if success else "Worker could not be unblocked.", "success" if success else "error")
+    return redirect(url_for("admin_dashboard"))
+
+
+@app.route("/admin/workers/<agent_id>/role", methods=["POST"])
+@login_required(role="agent")
+def admin_worker_role(agent_id):
+    if not g.is_admin:
+        flash("Admin access is required.", "error")
+        return redirect(url_for("home"))
+        
+    new_role = request.form.get("role", "worker")
+    try:
+        conn = get_connection()
+        cursor = conn.cursor()
+        cursor.execute("UPDATE agents SET role = ? WHERE agent_id = ?", (new_role, agent_id))
+        conn.commit()
+        conn.close()
+        flash(f"Worker {agent_id} role updated to {new_role}.", "success")
+    except Exception:
+        flash(f"Failed to update worker {agent_id} role.", "error")
+        
     return redirect(url_for("admin_dashboard"))
 
 
@@ -560,12 +598,19 @@ def admin_export():
 
 
 @app.route("/worker/dashboard")
-@login_required(role="worker")
+@login_required()
 def worker_dashboard():
-    if is_worker_blocked(g.current_user.get("agent_id")):
+    # Allow workers and supervisors to see their dashboard (if a supervisor has a department)
+    if g.user_type not in ["worker", "supervisor"]:
+        flash("Access denied.", "error")
+        return redirect(url_for("home"))
+
+    if g.current_user.get("status") == "blocked":
         flash("This worker account is currently blocked. Please contact admin.", "error")
         return redirect(url_for("logout"))
 
+    is_pending = g.current_user.get("status") == "pending"
+    
     term = request.args.get("term", "").strip()
     status_filter = request.args.get("status", "All")
     urgency_filter = request.args.get("urgency", "All")
@@ -579,22 +624,111 @@ def worker_dashboard():
             term=term,
             status_filter=status_filter,
             urgency_filter=urgency_filter,
-            department_filter=g.current_user.get("department"),
+            assigned_agent_filter=g.current_user.get("agent_id"),
         ),
         tickets=get_tickets_by_department(g.current_user.get("department")),
         unread_worker=unread_worker,
         selected_status=status_filter,
         selected_urgency=urgency_filter,
         search_term=term,
+        is_pending=is_pending,
     )
 
 
+@app.route("/supervisor/dashboard")
+@login_required(role="supervisor")
+def supervisor_dashboard():
+    # Admin can also access this
+    term = request.args.get("term", "").strip()
+    status_filter = request.args.get("status", "All")
+    urgency_filter = request.args.get("urgency", "All")
+    category_filter = request.args.get("category", "All")
+    selected_dept = request.args.get("dept", "").strip() or None
+    page = int(request.args.get("page", 1))
+    per_page = 5
+    
+    from auth.agent_auth import DEPARTMENTS
+    
+    all_filtered_complaints = search_complaints(
+        term=term, 
+        status_filter=status_filter, 
+        urgency_filter=urgency_filter, 
+        category_filter=category_filter,
+        department_filter=selected_dept
+    )
+    
+    total_complaints = len(all_filtered_complaints)
+    total_pages = (total_complaints + per_page - 1) // per_page
+    start_idx = (page - 1) * per_page
+    paginated_complaints = all_filtered_complaints[start_idx : start_idx + per_page]
+    
+    return render_template(
+        "supervisor_dashboard.html",
+        stats=get_complaint_stats(),
+        complaints=paginated_complaints,
+        pending_workers=get_pending_workers(),
+        categories=["All"] + CATEGORIES,
+        departments=DEPARTMENTS,
+        selected_status=status_filter,
+        selected_urgency=urgency_filter,
+        selected_category=category_filter,
+        selected_dept=selected_dept,
+        search_term=term,
+        current_page=page,
+        total_pages=total_pages,
+        total_count=total_complaints,
+        dept_workers=get_workers_by_department(selected_dept) if selected_dept else [],
+        is_admin_view=g.is_admin
+    )
+
+
+@app.route("/supervisor/complaints/<int:complaint_id>/assign", methods=["POST"])
+@login_required(role="supervisor")
+def supervisor_assign_worker(complaint_id):
+    worker_id = request.form.get("worker_id", "").strip()
+    if not worker_id:
+        flash("Please select a worker to assign.", "error")
+    else:
+        success = update_complaint_status(complaint_id, "In Progress", agent_id=worker_id, notes="Assigned by supervisor")
+        if success:
+            flash(f"Complaint assigned to {worker_id}.", "success")
+        else:
+            flash("Failed to assign complaint.", "error")
+            
+    return redirect(url_for("supervisor_dashboard", dept=request.form.get("dept")))
+
+
+@app.route("/supervisor/block/<agent_id>", methods=["POST"])
+@login_required(role="supervisor")
+def supervisor_block(agent_id):
+    success = block_worker(agent_id)
+    if success:
+        flash(f"Worker {agent_id} has been blocked.", "success")
+    else:
+        flash(f"Failed to block worker {agent_id}.", "error")
+    return redirect(url_for("supervisor_dashboard"))
+
+
+@app.route("/supervisor/restore/<agent_id>", methods=["POST"])
+@login_required(role="supervisor")
+def supervisor_restore(agent_id):
+    success = restore_worker(agent_id)
+    if success:
+        flash(f"Worker {agent_id} has been restored to active status.", "success")
+    else:
+        flash(f"Failed to restore worker {agent_id}.", "error")
+    return redirect(url_for("supervisor_dashboard"))
+
+
 @app.route("/worker/complaints/<int:complaint_id>/status", methods=["POST"])
-@login_required(role="worker")
+@login_required()
 def worker_update_complaint(complaint_id):
-    if is_worker_blocked(g.current_user.get("agent_id")):
-        flash("Blocked workers cannot update complaints.", "error")
-        return redirect(url_for("logout"))
+    if g.user_type not in ["worker", "supervisor"]:
+        return redirect(url_for("home"))
+        
+    if g.current_user.get("status") != "active":
+        flash("Only active workers can update complaints.", "error")
+        return redirect(url_for("worker_dashboard"))
 
     status_value = request.form.get("status", "").strip()
     success = update_complaint_status(

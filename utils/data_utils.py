@@ -192,6 +192,18 @@ def init_database():
         cursor.execute("ALTER TABLE agents ADD COLUMN is_blocked INTEGER DEFAULT 0")
     except Exception:
         pass
+    try:
+        cursor.execute("ALTER TABLE agents ADD COLUMN status TEXT DEFAULT 'active'")
+    except Exception:
+        pass
+    try:
+        cursor.execute("ALTER TABLE agents ADD COLUMN role TEXT DEFAULT 'worker'")
+    except Exception:
+        pass
+    try:
+        cursor.execute("ALTER TABLE users ADD COLUMN status TEXT DEFAULT 'active'")
+    except Exception:
+        pass
 
     # Migration: Add work tracking columns to complaints
     try:
@@ -480,7 +492,7 @@ def update_complaint_status(complaint_id, new_status, agent_id=None, notes=None,
 
 
 def search_complaints(term=None, status_filter=None, urgency_filter=None,
-                      category_filter=None, department_filter=None):
+                      category_filter=None, department_filter=None, assigned_agent_filter=None):
     """Search and filter complaints."""
     try:
         conn = get_connection()
@@ -503,6 +515,9 @@ def search_complaints(term=None, status_filter=None, urgency_filter=None,
         if department_filter:
             query += " AND LOWER(TRIM(department)) = LOWER(TRIM(?))"
             params.append(department_filter)
+        if assigned_agent_filter:
+            query += " AND assigned_agent = ?"
+            params.append(assigned_agent_filter)
 
         query += """
             ORDER BY
@@ -1124,7 +1139,9 @@ def get_all_workers():
         cursor.execute(
             """SELECT id, name, agent_id, department,
                       COALESCE(warning_count, 0) as warning_count,
-                      COALESCE(is_blocked, 0) as is_blocked
+                      COALESCE(is_blocked, 0) as is_blocked,
+                      COALESCE(status, 'active') as status,
+                      COALESCE(role, 'worker') as role
                FROM agents WHERE agent_id != 'AGT0001'
                ORDER BY department, name"""
         )
@@ -1135,39 +1152,111 @@ def get_all_workers():
         return []
 
 
+def get_workers_by_department(dept):
+    """Return all active workers in a specific department."""
+    try:
+        conn = get_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT id, name, agent_id FROM agents WHERE TRIM(LOWER(department)) = TRIM(LOWER(?)) AND role = 'worker' AND status = 'active'",
+            (dept,)
+        )
+        rows = [dict(r) for r in cursor.fetchall()]
+        conn.close()
+        return rows
+    except Exception:
+        return []
+
+
 def warn_worker(agent_id, max_warnings=3):
-    """Increment warning count for a worker; auto-block if >= max_warnings.
-    Returns (new_count, is_now_blocked).
+    """Increment warning count for a worker; set status to 'pending' if >= max_warnings.
+    Returns (new_count, is_now_pending).
     """
     try:
         conn = get_connection()
         cursor = conn.cursor()
         # Fetch current state
         cursor.execute(
-            "SELECT COALESCE(warning_count, 0), COALESCE(is_blocked, 0) FROM agents WHERE agent_id = ?",
+            "SELECT COALESCE(warning_count, 0), status FROM agents WHERE agent_id = ?",
             (agent_id,)
         )
         row = cursor.fetchone()
         if not row:
             conn.close()
             return None, None
-        current_count, already_blocked = row[0], row[1]
-        if already_blocked:
+        current_count, status = row[0], row[1]
+        
+        if status == "blocked" or status == "pending":
             conn.close()
-            return current_count, True  # already blocked, don't increment further
+            return current_count, (status == "pending")
 
         new_count = current_count + 1
-        is_now_blocked = 1 if new_count >= max_warnings else 0
-        cursor.execute(
-            "UPDATE agents SET warning_count = ?, is_blocked = ? WHERE agent_id = ?",
-            (new_count, is_now_blocked, agent_id)
-        )
+        is_now_pending = (new_count >= max_warnings)
+        
+        if is_now_pending:
+            cursor.execute(
+                "UPDATE agents SET warning_count = ?, status = 'pending' WHERE agent_id = ?",
+                (new_count, agent_id)
+            )
+        else:
+            cursor.execute(
+                "UPDATE agents SET warning_count = ? WHERE agent_id = ?",
+                (new_count, agent_id)
+            )
+            
         conn.commit()
         conn.close()
-        return new_count, bool(is_now_blocked)
+        return new_count, is_now_pending
     except Exception as e:
         print(f"Error warning worker: {e}")
         return None, None
+
+
+def block_worker(agent_id):
+    """Set worker status to blocked."""
+    try:
+        conn = get_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "UPDATE agents SET status = 'blocked', is_blocked = 1 WHERE agent_id = ?",
+            (agent_id,)
+        )
+        conn.commit()
+        conn.close()
+        return True
+    except Exception:
+        return False
+
+
+def restore_worker(agent_id):
+    """Restore worker to active status and reset warnings."""
+    try:
+        conn = get_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "UPDATE agents SET status = 'active', is_blocked = 0, warning_count = 0 WHERE agent_id = ?",
+            (agent_id,)
+        )
+        conn.commit()
+        conn.close()
+        return True
+    except Exception:
+        return False
+
+
+def get_pending_workers():
+    """Return all workers with pending status."""
+    try:
+        conn = get_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT * FROM agents WHERE status = 'pending' ORDER BY created_at DESC"
+        )
+        rows = [dict(r) for r in cursor.fetchall()]
+        conn.close()
+        return rows
+    except Exception:
+        return []
 
 
 def unblock_worker(agent_id):

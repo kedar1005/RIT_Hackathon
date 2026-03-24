@@ -14,7 +14,13 @@
         <div class="hero-actions">
             <a class="button button-primary" href="{{ url_for('citizen_login') }}">Citizen Login</a>
             <a class="button button-secondary" href="{{ url_for('admin_login') }}">Admin Login</a>
-            <a class="button button-secondary" href="{{ url_for('worker_login') }}">Worker Login</a>
+            {% if current_role == 'supervisor' %}
+                <a class="button button-primary" href="{{ url_for('supervisor_dashboard') }}">Supervisor Dashboard</a>
+            {% elif current_role == 'worker' %}
+                <a class="button button-primary" href="{{ url_for('worker_dashboard') }}">Worker Dashboard</a>
+            {% else %}
+                <a class="button button-secondary" href="{{ url_for('worker_login') }}">Worker/Supervisor Login</a>
+            {% endif %}
         </div>
     </div>
     <div class="hero-panel">
@@ -39,9 +45,9 @@
         <p>The admin dashboard now has a Flask shell ready for filters, status updates, and worker management.</p>
     </article>
     <article class="panel">
-        <p class="eyebrow">Worker Queue</p>
-        <h3>Keep department-level resolution workflows</h3>
-        <p>Workers still use the same assignment logic, complaint statuses, and inbox records from the database.</p>
+        <p class="eyebrow">Supervisor Portal</p>
+        <h3>Review pending workers and oversight</h3>
+        <p>Supervisors can review workers who have reached the warning limit and decide to restore or block their access.</p>
     </article>
 </section>
 {% endblock %}

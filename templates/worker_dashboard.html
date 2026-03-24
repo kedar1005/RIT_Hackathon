@@ -4,9 +4,16 @@
 
 {% block content %}
 <section class="dashboard-grid">
+    {% if is_pending %}
+    <article class="panel full-span alert-banner">
+        <h2>⚠️ Your account is under supervisor review</h2>
+        <p>Your account has been flagged for review. You can still login, but you cannot receive new complaint assignments or update current ones until the review is complete.</p>
+    </article>
+    {% endif %}
+    
     <article class="panel">
-        <p class="eyebrow">Department Queue</p>
-        <h2>Assigned complaint stream</h2>
+        <p class="eyebrow">Assigned Tasks</p>
+        <h2>Your complaint queue</h2>
         <form method="get" class="filter-grid">
             <input type="text" name="term" placeholder="Search complaints" value="{{ search_term }}">
             <select name="status">
@@ -48,7 +55,7 @@
                     </form>
                 </article>
             {% else %}
-                <p class="muted">No complaints for this department.</p>
+                <p class="muted">You have no assigned complaints at the moment.</p>
             {% endfor %}
         </div>
     </article>
@@ -70,4 +77,20 @@
         </div>
     </article>
 </section>
+
+<style>
+    .full-span {
+        grid-column: 1 / -1;
+    }
+    .alert-banner {
+        background: #fdf2f2;
+        border: 1px solid #fecaca;
+        color: #991b1b;
+        margin-bottom: 1.5rem;
+    }
+    .alert-banner h2 {
+        color: #991b1b;
+        margin-top: 0;
+    }
+</style>
 {% endblock %}
