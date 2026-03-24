@@ -15,7 +15,7 @@ from utils.data_utils import (
     get_all_complaints, search_complaints, update_complaint_status,
     add_correction, get_correction_count_since_last_training,
     get_complaint_stats, get_complaints_with_coords, get_available_cities_with_coords,
-    export_complaints_csv, get_model_versions, get_all_corrections,
+    get_complaint_by_id, export_complaints_csv, get_model_versions, get_all_corrections,
     get_agent_leaderboard, get_daily_trend, add_agent,
     get_tickets_for_admin, get_unread_count_admin, mark_tickets_read_admin,
     get_tickets_by_department, get_unread_count_worker, mark_tickets_read_worker,
@@ -123,24 +123,70 @@ def show_agent_dashboard():
                 )
 
                 with st.expander(f"Actions — #CMP-{c['id']:04d}"):
+                    # Refresh complaint data to get timestamps
+                    comp_detail = get_complaint_by_id(c['id'])
+                    started_at = comp_detail.get('work_started_at')
+                    completed_at = comp_detail.get('work_completed_at')
+                    proof_img = comp_detail.get('completion_image')
+                    
+                    if started_at:
+                        try:
+                            start_dt = datetime.fromisoformat(started_at)
+                            end_dt = datetime.fromisoformat(completed_at) if completed_at else datetime.now()
+                            elapsed = end_dt - start_dt
+                            mins = int(elapsed.total_seconds() / 60)
+                            hours = mins // 60
+                            duration_text = f"{hours}h {mins % 60}m" if hours > 0 else f"{mins}m"
+                            
+                            status_label = "✅ Total Work Duration" if completed_at else "⏳ Current Work Duration"
+                            st.info(f"{status_label}: **{duration_text}**")
+                            if started_at:
+                                st.markdown(f"<div style='font-size:11px;color:#8B98B8;margin-bottom:10px;'>Started: {started_at[:16]}</div>", unsafe_allow_html=True)
+                        except Exception:
+                            pass
+
+                    if proof_img and os.path.exists(proof_img):
+                        st.markdown("**Resolution Proof:**")
+                        st.image(proof_img, width=300)
+
                     act_col1, act_col2, act_col3 = st.columns(3)
 
                     with act_col1:
                         if c['status'] == 'Pending':
                             if st.button("▶️ Start Work", key=f"start_{c['id']}"):
+                                now = datetime.now().isoformat()
                                 if update_complaint_status(c['id'], "In Progress",
-                                                          agent_id, "Agent started work"):
+                                                          agent_id, "Agent started work",
+                                                          work_started_at=now):
                                     styled_success("Status → In Progress")
                                     st.rerun()
 
                     with act_col2:
                         if c['status'] in ['Pending', 'In Progress']:
+                            # Admin might also want to upload proof if they resolve it themselves
+                            proof_photo = st.file_uploader("📸 Work Proof", type=["jpg", "jpeg", "png"], key=f"admin_proof_{c['id']}")
+                            
                             if st.button("✅ Mark Resolved", key=f"resolve_{c['id']}"):
-                                notes = st.session_state.get(f"resolve_notes_{c['id']}", "")
-                                if update_complaint_status(c['id'], "Resolved",
-                                                          agent_id, notes or "Issue resolved"):
-                                    styled_success("Status → Resolved")
-                                    st.rerun()
+                                if not proof_photo and c['status'] == 'In Progress': # If it was in progress, we expect proof
+                                     styled_error("Please upload a photo as proof of work.")
+                                else:
+                                    fpath = None
+                                    if proof_photo:
+                                        upload_dir = "assets/uploaded_images"
+                                        os.makedirs(upload_dir, exist_ok=True)
+                                        fname = f"proof_{c['id']}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.jpg"
+                                        fpath = os.path.join(upload_dir, fname)
+                                        with open(fpath, "wb") as f:
+                                            f.write(proof_photo.getbuffer())
+                                    
+                                    now = datetime.now().isoformat()
+                                    notes = st.session_state.get(f"resolve_notes_{c['id']}", "")
+                                    if update_complaint_status(c['id'], "Resolved",
+                                                              agent_id, notes or "Issue resolved",
+                                                              work_completed_at=now,
+                                                              completion_image=fpath):
+                                        styled_success("Status → Resolved")
+                                        st.rerun()
 
                     with act_col3:
                         if c['status'] == 'In Progress':
@@ -791,6 +837,13 @@ def show_agent_dashboard():
                 </div>
                 """, unsafe_allow_html=True)
 
+                if t['status'] == 'Closed':
+                    comp = get_complaint_by_id(t['complaint_id'])
+                    if comp and comp.get('completion_image'):
+                        if os.path.exists(comp['completion_image']):
+                            with st.expander(f"🖼️ View Resolution Proof — #{t['complaint_id']:04d}"):
+                                st.image(comp['completion_image'], caption="Work Proof", width=300)
+
 
 def show_worker_dashboard():
     """Display worker dashboard — department-filtered complaint queue only."""
@@ -886,24 +939,58 @@ def show_worker_dashboard():
             )
 
             with st.expander(f"Actions — #CMP-{c['id']:04d}"):
+                # Refresh complaint data to get timestamps
+                comp_detail = get_complaint_by_id(c['id'])
+                started_at = comp_detail.get('work_started_at')
+                
+                if started_at:
+                    try:
+                        start_dt = datetime.fromisoformat(started_at)
+                        elapsed = datetime.now() - start_dt
+                        mins = int(elapsed.total_seconds() / 60)
+                        hours = mins // 60
+                        duration_text = f"{hours}h {mins % 60}m" if hours > 0 else f"{mins}m"
+                        st.info(f"⏳ Work in progress for: **{duration_text}** (Started: {started_at[:16]})")
+                    except Exception:
+                        pass
+
                 act_col1, act_col2, act_col3 = st.columns(3)
 
                 with act_col1:
                     if c['status'] == 'Pending':
                         if st.button("▶️ Start Work", key=f"w_start_{c['id']}"):
+                            now = datetime.now().isoformat()
                             if update_complaint_status(c['id'], "In Progress",
-                                                      worker_id, "Worker started work"):
+                                                      worker_id, "Worker started work",
+                                                      work_started_at=now):
                                 styled_success("Status → In Progress")
                                 st.rerun()
 
                 with act_col2:
                     if c['status'] in ['Pending', 'In Progress']:
+                        # Photo proof required for resolution
+                        proof_photo = st.file_uploader("📸 Work Proof", type=["jpg", "jpeg", "png"], key=f"proof_{c['id']}")
+                        
                         if st.button("✅ Mark Resolved", key=f"w_resolve_{c['id']}"):
-                            notes = st.session_state.get(f"w_resolve_notes_{c['id']}", "")
-                            if update_complaint_status(c['id'], "Resolved",
-                                                      worker_id, notes or "Issue resolved"):
-                                styled_success("Status → Resolved")
-                                st.rerun()
+                            if not proof_photo:
+                                styled_error("Please upload a photo as proof of work.")
+                            else:
+                                # Save proof photo
+                                upload_dir = "assets/uploaded_images"
+                                os.makedirs(upload_dir, exist_ok=True)
+                                fname = f"proof_{c['id']}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.jpg"
+                                fpath = os.path.join(upload_dir, fname)
+                                with open(fpath, "wb") as f:
+                                    f.write(proof_photo.getbuffer())
+                                
+                                now = datetime.now().isoformat()
+                                notes = st.session_state.get(f"w_resolve_notes_{c['id']}", "")
+                                if update_complaint_status(c['id'], "Resolved",
+                                                          worker_id, notes or "Issue resolved",
+                                                          work_completed_at=now,
+                                                          completion_image=fpath):
+                                    styled_success("Status → Resolved (Proof uploaded)")
+                                    st.rerun()
 
                 with act_col3:
                     if c['status'] == 'In Progress':
@@ -959,3 +1046,10 @@ def show_worker_dashboard():
                     </div>
                 </div>
                 """, unsafe_allow_html=True)
+
+                if t['status'] == 'Closed':
+                    comp = get_complaint_by_id(t['complaint_id'])
+                    if comp and comp.get('completion_image'):
+                        if os.path.exists(comp['completion_image']):
+                            with st.expander(f"🖼️ View Resolution Proof — #{t['complaint_id']:04d}"):
+                                st.image(comp['completion_image'], caption="Work Proof", width=300)

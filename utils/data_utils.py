@@ -193,6 +193,26 @@ def init_database():
     except Exception:
         pass
 
+    # Migration: Add work tracking columns to complaints
+    try:
+        cursor.execute("ALTER TABLE complaints ADD COLUMN work_started_at TIMESTAMP")
+    except Exception:
+        pass
+    try:
+        cursor.execute("ALTER TABLE complaints ADD COLUMN work_completed_at TIMESTAMP")
+    except Exception:
+        pass
+    try:
+        cursor.execute("ALTER TABLE complaints ADD COLUMN completion_image TEXT")
+    except Exception:
+        pass
+
+    # Migration: Add is_read_citizen to tickets
+    try:
+        cursor.execute("ALTER TABLE tickets ADD COLUMN is_read_citizen INTEGER DEFAULT 0")
+    except Exception:
+        pass
+
     conn.commit()
     conn.close()
 
@@ -384,7 +404,8 @@ def get_complaint_by_id(complaint_id):
         return None
 
 
-def update_complaint_status(complaint_id, new_status, agent_id=None, notes=None):
+def update_complaint_status(complaint_id, new_status, agent_id=None, notes=None,
+                            work_started_at=None, work_completed_at=None, completion_image=None):
     """Update a complaint's status and log the change."""
     try:
         conn = get_connection()
@@ -407,9 +428,35 @@ def update_complaint_status(complaint_id, new_status, agent_id=None, notes=None)
         if new_status == "Resolved":
             update_fields += ", resolved_at = ?"
             update_values.append(now)
+            if work_completed_at:
+                update_fields += ", work_completed_at = ?"
+                update_values.append(work_completed_at)
+            if completion_image:
+                update_fields += ", completion_image = ?"
+                update_values.append(completion_image)
+        
+        if work_started_at:
+            update_fields += ", work_started_at = ?"
+            update_values.append(work_started_at)
 
         update_values.append(complaint_id)
         cursor.execute(f"UPDATE complaints SET {update_fields} WHERE id = ?", update_values)
+
+        # Trigger citizen notification on resolution
+        if new_status == "Resolved":
+            cursor.execute("SELECT user_id, department, category FROM complaints WHERE id = ?", (complaint_id,))
+            comp = cursor.fetchone()
+            if comp:
+                msg = f"Your complaint #CMP-{complaint_id:04d} ({comp['category']}) has been resolved. "
+                if notes:
+                    msg += f"\nNote: {notes}"
+                
+                # Add notification ticket for citizen
+                cursor.execute(
+                    """INSERT INTO tickets (complaint_id, user_id, message, department, status, is_read_worker, is_read_admin)
+                       VALUES (?, ?, ?, ?, 'Closed', 1, 1)""",
+                    (complaint_id, comp['user_id'], msg, comp['department'],)
+                )
 
         cursor.execute("""
             INSERT INTO complaint_history
@@ -961,6 +1008,54 @@ def get_tickets_by_department(dept):
         return rows
     except Exception:
         return []
+
+
+def get_user_tickets(user_id):
+    """Return all tickets for a specific citizen (inbox)."""
+    try:
+        conn = get_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT * FROM tickets WHERE user_id = ? ORDER BY created_at DESC",
+            (user_id,)
+        )
+        rows = [dict(r) for r in cursor.fetchall()]
+        conn.close()
+        return rows
+    except Exception:
+        return []
+
+
+def mark_tickets_read_user(user_id):
+    """Mark all tickets as read for a citizen."""
+    try:
+        conn = get_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "UPDATE tickets SET is_read_citizen = 1 WHERE user_id = ?",
+            (user_id,)
+        )
+        conn.commit()
+        conn.close()
+        return True
+    except Exception:
+        return False
+
+
+def get_unread_count_user(user_id):
+    """Return count of unread tickets for a citizen."""
+    try:
+        conn = get_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT COUNT(*) FROM tickets WHERE user_id = ? AND is_read_citizen = 0",
+            (user_id,)
+        )
+        count = cursor.fetchone()[0]
+        conn.close()
+        return count
+    except Exception:
+        return 0
 
 
 def mark_tickets_read_admin():

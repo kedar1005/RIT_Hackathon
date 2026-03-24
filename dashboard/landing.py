@@ -90,17 +90,11 @@ def show_landing_page():
     """, unsafe_allow_html=True)
 
     # CTA Buttons
-    col1, col2, col3 = st.columns([1, 2, 1])
+    col1, col2, col3 = st.columns([1.5, 2, 1.5])
     with col2:
-        btn_col1, btn_col2 = st.columns(2)
-        with btn_col1:
-            if st.button("🏛️ Report an Issue", use_container_width=True, key="hero_citizen"):
-                st.session_state.page = 'user_auth'
-                st.rerun()
-        with btn_col2:
-            if st.button("🛡️ Agent Portal", use_container_width=True, key="hero_agent"):
-                st.session_state.page = 'agent_auth'
-                st.rerun()
+        if st.button("🏛️ Report an Issue", use_container_width=True, key="hero_citizen"):
+            st.session_state.page = 'user_auth'
+            st.rerun()
 
     # ─── STAT STRIP ───────────────────────────────────────────────────
     st.markdown("""
@@ -225,22 +219,21 @@ def show_landing_page():
             </div>
             """, unsafe_allow_html=True)
 
-    # ─── ROLE SELECTION ────────────────────────────────────────────────
+    # ─── ROLE SELECTION (Citizen Focus) ────────────────────────────────
     st.markdown("""
     <div style="margin:3rem 0 1rem;">
         <h2 style="font-family:'Sora',sans-serif;font-size:22px;font-weight:700;
             color:#F0F4FF;text-align:center;margin-bottom:2rem;">
-            Choose Your Portal
+            Join the Smart City Movement
         </h2>
     </div>
     """, unsafe_allow_html=True)
 
-    role_col1, role_col2 = st.columns(2)
-    with role_col1:
+    with st.container():
         st.markdown("""
         <div style="background:rgba(17,24,39,0.6);backdrop-filter:blur(12px);
             border:1px solid rgba(0,212,255,0.2);border-radius:16px;padding:2rem;
-            text-align:center;transition:all 0.2s ease;min-height:280px;">
+            text-align:center;transition:all 0.2s ease;max-width:600px;margin:0 auto 1.5rem;">
             <div style="font-size:48px;margin-bottom:16px;">🏛️</div>
             <h3 style="font-family:'Sora',sans-serif;font-size:20px;font-weight:700;
                 color:#00D4FF;margin:0 0 12px;">I'm a Citizen</h3>
@@ -249,7 +242,7 @@ def show_landing_page():
                 Report civic issues in your neighbourhood — potholes, garbage,
                 broken lights, water problems, and more.
             </p>
-            <ul style="text-align:left;list-style:none;padding:0;margin:0 0 16px;">
+            <ul style="text-align:left;list-style:none;padding:0;margin:0 0 16px;max-width:320px;margin-left:auto;margin-right:auto;">
                 <li style="font-family:'DM Sans',sans-serif;font-size:12px;color:#8B98B8;
                     padding:4px 0;">✦ AI-powered issue classification</li>
                 <li style="font-family:'DM Sans',sans-serif;font-size:12px;color:#8B98B8;
@@ -261,38 +254,12 @@ def show_landing_page():
             </ul>
         </div>
         """, unsafe_allow_html=True)
-        if st.button("Report Issues →", use_container_width=True, key="role_citizen"):
-            st.session_state.page = 'user_auth'
-            st.rerun()
-
-    with role_col2:
-        st.markdown("""
-        <div style="background:rgba(17,24,39,0.6);backdrop-filter:blur(12px);
-            border:1px solid rgba(124,58,237,0.2);border-radius:16px;padding:2rem;
-            text-align:center;transition:all 0.2s ease;min-height:280px;">
-            <div style="font-size:48px;margin-bottom:16px;">🛡️</div>
-            <h3 style="font-family:'Sora',sans-serif;font-size:20px;font-weight:700;
-                color:#7C3AED;margin:0 0 12px;">I'm a Resolution Agent</h3>
-            <p style="font-family:'DM Sans',sans-serif;color:#8B98B8;font-size:13px;
-                line-height:1.6;margin:0 0 16px;">
-                Access the AI-powered control center to manage, resolve,
-                and analyze civic complaints city-wide.
-            </p>
-            <ul style="text-align:left;list-style:none;padding:0;margin:0 0 16px;">
-                <li style="font-family:'DM Sans',sans-serif;font-size:12px;color:#8B98B8;
-                    padding:4px 0;">✦ Smart priority queue</li>
-                <li style="font-family:'DM Sans',sans-serif;font-size:12px;color:#8B98B8;
-                    padding:4px 0;">✦ AI correction & retraining</li>
-                <li style="font-family:'DM Sans',sans-serif;font-size:12px;color:#8B98B8;
-                    padding:4px 0;">✦ City-wide heatmap intelligence</li>
-                <li style="font-family:'DM Sans',sans-serif;font-size:12px;color:#8B98B8;
-                    padding:4px 0;">✦ Analytics & CSV export</li>
-            </ul>
-        </div>
-        """, unsafe_allow_html=True)
-        if st.button("Access Control Center →", use_container_width=True, key="role_agent"):
-            st.session_state.page = 'agent_auth'
-            st.rerun()
+        
+        c_col1, c_col2, c_col3 = st.columns([1.2, 1, 1.2])
+        with c_col2:
+            if st.button("Report Issues →", use_container_width=True, key="role_citizen"):
+                st.session_state.page = 'user_auth'
+                st.rerun()
 
     # ─── FOOTER ────────────────────────────────────────────────────────
     st.markdown("""

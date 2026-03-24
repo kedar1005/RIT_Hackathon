@@ -14,7 +14,8 @@ from utils.ui_utils import (
 )
 from utils.data_utils import (
     add_complaint, get_user_complaints, get_complaint_by_id,
-    check_duplicate, add_feedback, add_ticket
+    check_duplicate, add_feedback, add_ticket,
+    get_user_tickets, mark_tickets_read_user, get_unread_count_user
 )
 from utils.geo_utils import (
     extract_gps_from_image, geocode_address, get_image_hash,
@@ -53,9 +54,14 @@ def show_user_dashboard():
     user = st.session_state.get('current_user', {})
     user_id = user.get('id', 1)
 
-    tab_submit, tab_my, tab_help = st.tabs([
+    # Badge for inbox
+    unread_c = get_unread_count_user(user_id)
+    inbox_label = f"📥 Inbox ({unread_c})" if unread_c > 0 else "📥 Inbox"
+
+    tab_submit, tab_my, tab_inbox, tab_help = st.tabs([
         "📝 Submit Complaint",
         "📋 My Complaints",
+        inbox_label,
         "❓ Help & Guidelines"
     ])
 
@@ -384,7 +390,56 @@ def show_user_dashboard():
                                         else:
                                             styled_error("Failed to raise ticket. Please try again.")
 
-    # ─── TAB 3: HELP & GUIDELINES ──────────────────────────────────────
+    # ─── TAB 3: INBOX ──────────────────────────────────────────────────
+    with tab_inbox:
+        section_header("📥 My Inbox", "Messages and notifications regarding your complaints")
+        
+        # Mark as read when viewing
+        mark_tickets_read_user(user_id)
+        
+        tickets = get_user_tickets(user_id)
+        
+        if not tickets:
+            st.markdown("""
+            <div style="text-align:center;padding:3rem;color:#8B98B8;
+                font-family:'DM Sans',sans-serif;">
+                📭 Your inbox is empty.
+            </div>
+            """, unsafe_allow_html=True)
+        else:
+            for t in tickets:
+                status_color = "#39FF14" if t['status'] == 'Closed' else "#00D4FF"
+                
+                # Try to find completion image if it's a resolution message
+                comp_id = t.get('complaint_id')
+                proof_img = None
+                if comp_id:
+                    comp = get_complaint_by_id(comp_id)
+                    if comp:
+                        proof_img = comp.get('completion_image')
+
+                st.markdown(f"""
+                <div style="background:#111827;border:1px solid rgba(255,255,255,0.08);
+                    border-radius:12px;padding:1.25rem;margin-bottom:1rem;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+                        <span style="font-family:'Sora',sans-serif;font-size:14px;font-weight:600;
+                            color:#F0F4FF;">CMP-{t['complaint_id']:04d} Notification</span>
+                        <span style="font-family:'JetBrains Mono',monospace;font-size:10px;
+                            color:{status_color};border:1px solid {status_color};
+                            padding:2px 8px;border-radius:20px;">{t['status']}</span>
+                    </div>
+                    <div style="font-family:'DM Sans',sans-serif;font-size:13px;color:#C1C8E4;
+                        margin-bottom:12px; white-space: pre-wrap;">{t['message']}</div>
+                    <div style="font-family:'DM Sans',sans-serif;font-size:11px;color:#4A5568;">
+                        🕒 {str(t.get('created_at',''))[:16]}
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+                
+                if proof_img and os.path.exists(proof_img):
+                    with st.expander("🖼️ View Resolution Proof Image"):
+                        st.image(proof_img, caption="Work Proof Provided by Team", width=300)
+    # ─── TAB 3: HELP & GUIDELINES ──────────────────────────────────────────
     with tab_help:
         section_header("Help & Guidelines",
                        "Everything you need to know about using CitiZen AI")
