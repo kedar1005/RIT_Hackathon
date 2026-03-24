@@ -656,7 +656,7 @@ def show_agent_dashboard():
             exp_urg = st.selectbox("Urgency", ["All", "High", "Medium", "Low"],
                                    key="exp_urg")
 
-        if st.button("📥 Export as CSV", key="export_csv"):
+        if st.button("⚙️ Generate Report", key="generate_report_btn"):
             try:
                 df = export_complaints_csv(
                     status_filter=exp_status if exp_status != "All" else None,
@@ -664,19 +664,64 @@ def show_agent_dashboard():
                     urgency_filter=exp_urg if exp_urg != "All" else None
                 )
                 if len(df) > 0:
-                    csv = df.to_csv(index=False)
-                    st.download_button(
-                        label="⬇️ Download CSV File",
-                        data=csv,
-                        file_name=f"citizen_ai_complaints_{datetime.now().strftime('%Y%m%d_%H%M')}.csv",
-                        mime="text/csv",
-                        key="download_csv"
-                    )
-                    styled_success(f"Export ready! {len(df)} records.")
+                    st.session_state['report_df'] = df
+                    styled_success(f"Report data fetched! {len(df)} records found. Select format below to download.")
                 else:
+                    st.session_state['report_df'] = None
                     styled_info("No complaints match the selected filters")
             except Exception as e:
-                styled_error(f"Export error: {str(e)[:80]}")
+                st.session_state['report_df'] = None
+                styled_error(f"Generate error: {str(e)[:150]}")
+
+        report_df = st.session_state.get('report_df')
+        if report_df is not None:
+            st.markdown("""
+            <div style="margin:1rem 0 0.5rem;">
+                <span style="font-family:'Sora',sans-serif;font-size:13px;font-weight:600;color:#F0F4FF;">
+                Download Options
+                </span>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            fmt_col1, fmt_col2 = st.columns([1.5, 2])
+            with fmt_col1:
+                selected_format = st.selectbox("Select Format", ["CSV", "PDF", "Word", "JSON"], key="download_format")
+                
+            with fmt_col2:
+                st.markdown("<div style='margin-top:28px;'></div>", unsafe_allow_html=True)
+                timestamp = datetime.now().strftime('%Y%m%d_%H%M')
+                base_name = f"citizen_ai_complaints_{timestamp}"
+                
+                try:
+                    if selected_format == "CSV":
+                        data = report_df.to_csv(index=False).encode('utf-8')
+                        mime = "text/csv"
+                        fname = f"{base_name}.csv"
+                    elif selected_format == "JSON":
+                        data = report_df.to_json(orient="records", indent=4).encode('utf-8')
+                        mime = "application/json"
+                        fname = f"{base_name}.json"
+                    elif selected_format == "Word":
+                        from utils.report_utils import generate_word_report
+                        data = generate_word_report(report_df)
+                        mime = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                        fname = f"{base_name}.docx"
+                    elif selected_format == "PDF":
+                        from utils.report_utils import generate_pdf_report
+                        data = generate_pdf_report(report_df)
+                        mime = "application/pdf"
+                        fname = f"{base_name}.pdf"
+                        
+                    st.download_button(
+                        label=f"⬇️ Download {selected_format} Report",
+                        data=data,
+                        file_name=fname,
+                        mime=mime,
+                        key="final_download_btn",
+                        use_container_width=True
+                    )
+                except Exception as e:
+                    styled_error(f"Error preparing {selected_format} download: {str(e)[:100]}")
 
     # ═══════════════════════════════════════════════════════════════════
     # TAB 5: ADD AGENTS + WORKER MANAGEMENT (ADMIN ONLY)
