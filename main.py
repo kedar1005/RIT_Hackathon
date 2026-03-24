@@ -18,7 +18,19 @@ st.set_page_config(
 )
 
 # ─── IMPORTS ──────────────────────────────────────────────────────────
-from utils.data_utils import init_database, get_active_session, delete_session, cleanup_sessions
+from utils.data_utils import init_database
+try:
+    from utils.data_utils import get_active_session, delete_session, cleanup_sessions
+except ImportError:
+    # Keep the app bootable even if session helpers are temporarily out of sync.
+    def get_active_session(session_id):
+        return None
+
+    def delete_session(session_id):
+        return False
+
+    def cleanup_sessions():
+        return None
 from utils.ui_utils import inject_global_css, sidebar_logo
 from dashboard.landing import show_landing_page
 from dashboard.user_dashboard import show_user_dashboard
@@ -141,7 +153,7 @@ if st.session_state.authenticated:
                 """
 
             st.sidebar.markdown(f"""
-            <div style="padding:0.5rem 0;border-top:1px solid rgba(255,255,255,0.06);
+            <div style="display:none;">
                 margin-top:0.5rem;padding-top:0.75rem;">
                 <div style="font-family:'DM Sans',sans-serif;font-size:11px;color:#8B98B8;
                     margin-bottom:6px;">LIVE STATUS</div>
@@ -154,6 +166,17 @@ if st.session_state.authenticated:
                 </div>
             </div>
             """, unsafe_allow_html=True)
+
+            live_status_html = (
+                '<div style="padding:0.5rem 0;border-top:1px solid rgba(255,255,255,0.06);'
+                'margin-top:0.5rem;padding-top:0.75rem;">'
+                '<div style="font-family:\'DM Sans\',sans-serif;font-size:11px;color:#8B98B8;'
+                'margin-bottom:6px;">LIVE STATUS</div>'
+                f'<div style="font-family:\'DM Sans\',sans-serif;font-size:12px;color:#F0F4FF;">Pending {badge_style}</div>'
+                f'<div style="font-family:\'DM Sans\',sans-serif;font-size:12px;color:#FF4444;margin-top:4px;">High Urgency: {high}</div>'
+                '</div>'
+            )
+            st.sidebar.markdown(live_status_html, unsafe_allow_html=True)
         except Exception:
             pass
 

@@ -54,10 +54,10 @@ def show_user_auth():
     with tab_login:
         st.markdown("""
         <div style="max-width:400px;margin:0 auto;padding:1.5rem;
-            background:#111827;border:1px solid rgba(255,255,255,0.08);
-            border-radius:16px;">
+            background:var(--bg-card);border:1px solid var(--border);
+            border-radius:16px;box-shadow:0 16px 36px rgba(15,23,42,0.08);">
             <h3 style="font-family:'Sora',sans-serif;font-size:18px;font-weight:600;
-                color:#F0F4FF;text-align:center;margin-bottom:1rem;">Welcome Back</h3>
+                color:var(--text-primary);text-align:center;margin-bottom:1rem;">Welcome Back</h3>
         </div>
         """, unsafe_allow_html=True)
 
@@ -66,15 +66,15 @@ def show_user_auth():
 
         # Row 2: reCAPTCHA Simulation
         st.markdown("""
-            <div style="border: 1px solid rgba(255,255,255,0.1); padding: 12px; border-radius: 8px; 
-                background-color: rgba(255,255,255,0.03); display: flex; align-items: center; 
+            <div style="border:1px solid var(--border); padding:12px; border-radius:12px; 
+                background-color:var(--bg-card); display:flex; align-items:center; 
                 justify-content: space-between; margin-top: 10px;">
-                <div style="display: flex; align-items: center; color: #F0F4FF; font-family: 'Inter', sans-serif;">
+                <div style="display:flex; align-items:center; color:var(--text-primary); font-family:'DM Sans', sans-serif;">
                     <span style="font-size: 14px;">I'm not a robot</span>
                 </div>
                 <div style="text-align: right; opacity: 0.8;">
-                    <img src="https://www.gstatic.com/recaptcha/api2/logo_48.png" width="28" style="filter: grayscale(1) brightness(2);">
-                    <div style="font-size: 8px; color: #8B98B8; margin-top: 2px;">reCAPTCHA</div>
+                    <img src="https://www.gstatic.com/recaptcha/api2/logo_48.png" width="28">
+                    <div style="font-size: 8px; color: var(--text-tertiary); margin-top: 2px;">reCAPTCHA</div>
                 </div>
             </div>
         """, unsafe_allow_html=True)
@@ -117,10 +117,10 @@ def show_user_auth():
     with tab_register:
         st.markdown("""
         <div style="max-width:400px;margin:0 auto;padding:1.5rem;
-            background:#111827;border:1px solid rgba(255,255,255,0.08);
-            border-radius:16px;">
+            background:var(--bg-card);border:1px solid var(--border);
+            border-radius:16px;box-shadow:0 16px 36px rgba(15,23,42,0.08);">
             <h3 style="font-family:'Sora',sans-serif;font-size:18px;font-weight:600;
-                color:#F0F4FF;text-align:center;margin-bottom:1rem;">Join CitiZen AI</h3>
+                color:var(--text-primary);text-align:center;margin-bottom:1rem;">Join CitiZen AI</h3>
         </div>
         """, unsafe_allow_html=True)
 
@@ -137,7 +137,7 @@ def show_user_auth():
             reg_identity = st.text_input("Aadhaar Number or Citizen ID", placeholder="12-digit Aadhaar / Min 6 ID")
 
             st.markdown("""
-            <div style="font-size:11px;color:#8B98B8;margin-bottom:10px;">
+            <div style="font-size:11px;color:var(--text-secondary);margin-bottom:10px;">
                 📍 Note: Platform exclusive to <b>Kolhapur</b> residents. Area validated by pincode.
             </div>
             """, unsafe_allow_html=True)
@@ -167,21 +167,21 @@ def show_user_auth():
                         else:
                             password_hash = _hash_password(reg_password)
                             user_id = add_user(reg_name, reg_email, password_hash, city="Kolhapur", pincode=reg_pincode, identity_id=reg_identity)
-                        if user_id:
-                            # Create persistent session
-                            sid = create_session(user_id, 'citizen')
-                            if sid:
-                                st.query_params["session"] = sid
-                                
-                            st.session_state.authenticated = True
-                            st.session_state.user_type = 'citizen'
-                            st.session_state.current_user = {
-                                'id': user_id,
-                                'name': reg_name,
-                                'email': reg_email
-                            }
-                            st.session_state.page = 'user_auth'
-                            styled_success("Account created! Welcome to CitiZen AI!")
-                            st.rerun()
-                        else:
-                            styled_error("Email already registered. Please sign in instead.")
+                            if user_id:
+                                # Create persistent session
+                                sid = create_session(user_id, 'citizen')
+                                if sid:
+                                    st.query_params["session"] = sid
+
+                                st.session_state.authenticated = True
+                                st.session_state.user_type = 'citizen'
+                                st.session_state.current_user = {
+                                    'id': user_id,
+                                    'name': reg_name,
+                                    'email': reg_email
+                                }
+                                st.session_state.page = 'user_auth'
+                                styled_success("Account created! Welcome to CitiZen AI!")
+                                st.rerun()
+                            else:
+                                styled_error("Email already registered. Please sign in instead.")

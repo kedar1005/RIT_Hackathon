@@ -405,20 +405,22 @@ def section_header(title, subtitle=None, accent="cyan"):
     c = colors.get(accent, "#00D4FF")
     sub = ""
     if subtitle:
-        sub = f'<p style="font-family:\'DM Sans\',sans-serif;color:#8B98B8;font-size:13px;margin:4px 0 0;">{subtitle}</p>'
-    st.markdown(f"""
-    <div style="margin:1.5rem 0 1rem;">
-        <div style="display:flex;align-items:center;gap:12px;">
-            <div style="width:3px;height:24px;background:{c};border-radius:2px;
-                box-shadow:0 0 10px {c}80;"></div>
-            <div>
-                <h3 style="font-family:'Sora',sans-serif;font-size:16px;font-weight:600;
-                    color:#F0F4FF;margin:0;">{title}</h3>
-                {sub}
-            </div>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
+        sub = (
+            f"<p style=\"font-family:'DM Sans',sans-serif;color:var(--text-secondary);"
+            f"font-size:13px;margin:4px 0 0;\">{subtitle}</p>"
+        )
+    header_html = (
+        f"<div style=\"margin:1.5rem 0 1rem;\">"
+        f"<div style=\"display:flex;align-items:center;gap:12px;\">"
+        f"<div style=\"width:3px;height:24px;background:{c};border-radius:2px;box-shadow:0 0 10px {c}80;\"></div>"
+        f"<div>"
+        f"<h3 style=\"font-family:'Sora',sans-serif;font-size:16px;font-weight:600;color:var(--text-primary);margin:0;\">{title}</h3>"
+        f"{sub}"
+        f"</div>"
+        f"</div>"
+        f"</div>"
+    )
+    st.markdown(header_html, unsafe_allow_html=True)
 
 
 def sidebar_logo():
