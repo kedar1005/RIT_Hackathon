@@ -933,7 +933,10 @@ def get_active_session(session_id):
         if session["user_type"] == "citizen":
             cursor.execute("SELECT id, name, email FROM users WHERE id = ?", (session["user_id"],))
         else:
-            cursor.execute("SELECT id, name, agent_id, department FROM agents WHERE id = ?", (session["user_id"],))
+            cursor.execute(
+                "SELECT id, name, agent_id, department, COALESCE(role, 'worker') as role, COALESCE(status, 'active') as status FROM agents WHERE id = ?",
+                (session["user_id"],)
+            )
             
         user_data = cursor.fetchone()
         conn.close()
