@@ -32,9 +32,24 @@
     <section class="tab-pane is-active" data-tab-panel="admin-queue">
         <div class="panel panel-nested">
             <p class="eyebrow">Complaint Queue</p>
-            <h2>Search and update complaints</h2>
-            <form method="get" class="filter-grid">
-                <input type="text" name="term" placeholder="Search complaints" value="{{ search_term }}">
+            {% if selected_department == 'All' %}
+                <h2>Select a department to view complaints</h2>
+                <div class="card-grid card-grid-4 top-space">
+                    {% for dept in departments %}
+                        <a href="{{ url_for('admin_dashboard', dept=dept) }}" class="metric-card interactive-card">
+                            <span>{{ dept }}</span>
+                            <strong>View Records →</strong>
+                        </a>
+                    {% endfor %}
+                </div>
+            {% else %}
+                <div class="button-row" style="margin-bottom: 20px;">
+                    <a href="{{ url_for('admin_dashboard', dept='All') }}" class="button button-secondary">← Back to All Departments</a>
+                </div>
+                <h2>{{ selected_department }} Complaints</h2>
+                <form method="get" class="filter-grid">
+                    <input type="hidden" name="dept" value="{{ selected_department }}">
+                    <input type="text" name="term" placeholder="Search in {{ selected_department }}" value="{{ search_term }}">
                 <select name="status">
                     {% for option in ['All', 'Pending', 'In Progress', 'Resolved'] %}
                         <option value="{{ option }}" {% if option == selected_status %}selected{% endif %}>{{ option }}</option>
@@ -158,6 +173,7 @@
                         <a class="button button-secondary" href="{{ url_for('admin_dashboard', page=pagination.next_page, term=search_term, status=selected_status, urgency=selected_urgency, category=selected_category, city=selected_city, date_from=selected_date_from, date_to=selected_date_to) }}">Next</a>
                     {% endif %}
                 </div>
+            {% endif %}
             {% endif %}
         </div>
     </section>

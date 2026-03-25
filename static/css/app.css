@@ -92,6 +92,39 @@ h1, h2, h3, p {
 
 .topnav a:hover, .ghost-link:hover, .button:hover { transform: translateY(-1px); }
 
+.interactive-card {
+    cursor: pointer;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    position: relative;
+    overflow: hidden;
+}
+
+.interactive-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 25px 60px rgba(15, 118, 110, 0.15);
+    background: linear-gradient(145deg, #ffffff, #f0f9f9);
+    border-color: var(--primary);
+}
+
+.interactive-card span {
+    font-size: 2.2rem;
+    font-weight: 800;
+    color: #10b981;
+    line-height: 1.1;
+    margin-bottom: 12px;
+}
+
+.interactive-card strong {
+    font-size: 1.05rem;
+    color: var(--muted);
+    font-weight: 600;
+    transition: transform 0.2s ease;
+}
+
+.interactive-card:hover strong {
+    transform: translateX(8px);
+}
+
 .active-user {
     margin-top: 18px;
     padding: 18px 20px;

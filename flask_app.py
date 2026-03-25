@@ -766,6 +766,7 @@ def admin_dashboard():
     analytics_date_to = request.args.get("analytics_date_to", "").strip() or None
     analytics_department = request.args.get("analytics_department", "All")
     analytics_priority = request.args.get("analytics_priority", "All")
+    dept_filter = request.args.get("dept", "All")
     page = request.args.get("page", default=1, type=int)
     unread_admin = get_unread_count_admin()
 
@@ -774,6 +775,7 @@ def admin_dashboard():
         status_filter=status_filter,
         urgency_filter=urgency_filter,
         category_filter=category_filter,
+        department_filter=dept_filter if dept_filter != "All" else None
     )
     pagination = _paginate_items(complaints, page)
     complaint_details = {complaint["id"]: _enrich_complaint(complaint) for complaint in complaints}
@@ -808,6 +810,7 @@ def admin_dashboard():
         "admin_dashboard.html",
         stats=stats,
         complaints=pagination["items"],
+        selected_department=dept_filter,
         complaint_details=complaint_details,
         tickets=tickets,
         unread_admin=unread_admin,
