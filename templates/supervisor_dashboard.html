@@ -33,6 +33,9 @@
             <button type="button" class="tab-button" data-tab-target="supervisor-reviews">
                 Pending Reviews{% if pending_workers %} ({{ pending_workers|length }}){% endif %}
             </button>
+            <button type="button" class="tab-button" data-tab-target="supervisor-team">
+                Team Management
+            </button>
         </div>
     </div>
 
@@ -194,6 +197,128 @@
                     </article>
                 {% else %}
                     <p class="muted">No employees currently under review.</p>
+                {% endfor %}
+            </div>
+        </div>
+    </section>
+
+    <section class="tab-pane" data-tab-panel="supervisor-team">
+        <div class="panel panel-nested">
+            <p class="eyebrow">Department Workforce</p>
+            <h2>Manage your team and assignments</h2>
+
+            <div class="top-space" style="margin-bottom: 30px; width: 100%;">
+                <!-- Internal Transfer Card -->
+                <div class="panel panel-nested" style="background: white; box-shadow: var(--shadow-md); border: 1px solid var(--border); border-left: 5px solid var(--success); transition: transform 0.2s ease; padding: 15px 20px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                        <div style="display: flex; align-items: center; gap: 12px;">
+                            <div class="dept-icon" style="width: 32px; height: 32px; font-size: 1rem; background: var(--success-bg); color: var(--success-text); border-radius: 6px;">+</div>
+                            <h3 style="margin: 0; font-size: 1.2rem;">Add Employee to My Team</h3>
+                        </div>
+                        <p class="eyebrow" style="color: var(--success-text); margin: 0; opacity: 0.8;">Personnel Transfer</p>
+                    </div>
+                    
+                    <form method="post" action="{{ url_for('supervisor_claim_worker') }}" style="display: grid; grid-template-columns: 1fr 2fr auto; gap: 15px; align-items: flex-end;">
+                        <div>
+                            <label class="detail-label" style="display: block; margin-bottom: 4px;">Quick Search</label>
+                            <input type="text" id="workerSearch" placeholder="Filter..." 
+                                   style="width: 100%; padding: 8px 12px; border-radius: 6px; border: 1px solid var(--border); background: var(--bg-primary); height: 40px;"
+                                   onkeyup="filterWorkers()">
+                        </div>
+
+                        <div>
+                            <label class="detail-label" style="display: block; margin-bottom: 4px;">Select Staff Member</label>
+                            <select name="worker_id" id="workerSelect" class="scrollable-select" required 
+                                    style="background: var(--bg-primary); height: 40px; font-size: 0.95rem; border: 1px solid var(--border); padding: 0 10px; border-radius: 6px; width: 100%;">
+                                <option value="" disabled selected>Choose a worker...</option>
+                                {% for worker in all_system_workers %}
+                                    {% if worker.department != selected_dept %}
+                                        <option value="{{ worker.agent_id }}" data-search="{{ worker.name|lower }} {{ worker.department|lower }}">
+                                            {{ worker.name }} — {{ worker.department }}
+                                        </option>
+                                    {% endif %}
+                                {% endfor %}
+                            </select>
+                        </label>
+                        </div>
+
+                        <button class="button button-primary" type="submit" style="height: 40px; padding: 0 20px; font-weight: 600; display: flex; align-items: center; gap: 8px; white-space: nowrap;">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="8.5" cy="7" r="4"></circle><line x1="20" y1="8" x2="20" y2="14"></line><line x1="23" y1="11" x2="17" y2="11"></line></svg>
+                            <span>Add to Team</span>
+                        </button>
+                    </form>
+                </div>
+            </div>
+
+            <script>
+            function filterWorkers() {
+                const input = document.getElementById('workerSearch');
+                const filter = input.value.toLowerCase();
+                const select = document.getElementById('workerSelect');
+                const options = select.getElementsByTagName('option');
+
+                // If input is cleared, show the placeholder and reset everything
+                if (filter === "") {
+                    for (let i = 0; i < options.length; i++) options[i].style.display = "";
+                    return;
+                }
+
+                for (let i = 0; i < options.length; i++) {
+                    if (options[i].value === "") continue; // skip placeholder
+                    const txtValue = options[i].getAttribute('data-search');
+                    if (txtValue && txtValue.indexOf(filter) > -1) {
+                        options[i].style.display = "";
+                    } else {
+                        options[i].style.display = "none";
+                    }
+                }
+            }
+            </script>
+            
+            <div class="stack compact-stack">
+                {% for worker in dept_workers %}
+                    <div class="worker-row">
+                        <div class="worker-info">
+                            <div class="pill-row">
+                                <h3>{{ worker.name }}</h3>
+                                {% if worker.status == 'active' %}
+                                    <span class="status-dot status-active" title="Active"></span>
+                                {% elif worker.status == 'pending' %}
+                                    <span class="status-dot status-pending" title="Pending"></span>
+                                {% else %}
+                                    <span class="status-dot status-blocked" title="Blocked"></span>
+                                {% endif %}
+                            </div>
+                            <p><strong>{{ worker.agent_id }}</strong> • {{ worker.department }}</p>
+                            <small>
+                                Warnings: {{ worker.warning_count }} • 
+                                Role: <span class="tag">{{ worker.role|capitalize }}</span>
+                                {% if worker.lead_id %}
+                                    • Reports to: <span class="tag">{{ worker.lead_id }}</span>
+                                {% endif %}
+                            </small>
+                        </div>
+                        
+                        <div class="worker-actions">
+                            <form method="post" action="{{ url_for('supervisor_assign_lead') }}" class="worker-update-form">
+                                <input type="hidden" name="worker_id" value="{{ worker.agent_id }}">
+                                <select name="lead_id">
+                                    <option value="">No Reporting Lead</option>
+                                    <option value="Self" {% if worker.lead_id == 'Self' %}selected{% endif %}>Myself</option>
+                                    {% for other in dept_workers %}
+                                        {% if other.role == 'supervisor' and other.agent_id != worker.agent_id %}
+                                            <option value="{{ other.agent_id }}" {% if worker.lead_id == other.agent_id %}selected{% endif %}>
+                                                {{ other.name }}
+                                            </option>
+                                        {% endif %}
+                                    {% endfor %}
+                                </select>
+                                <button class="button button-primary" type="submit">Assign Lead</button>
+                            </form>
+                        </div>
+                    </div>
+                {% else %}
+                    <p class="muted">No workers found in your department.</p>
                 {% endfor %}
             </div>
         </div>

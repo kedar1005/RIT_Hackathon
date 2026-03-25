@@ -470,9 +470,9 @@
                 <div class="stack compact-stack">
                     {% for worker in workers %}
                         <div class="worker-row">
-                            <div>
+                            <div class="worker-info">
                                 <div class="pill-row">
-                                    <strong>{{ worker.name }}</strong>
+                                    <h3>{{ worker.name }}</h3>
                                     {% if worker.status == 'active' %}
                                         <span class="status-dot status-active" title="Active"></span>
                                     {% elif worker.status == 'pending' %}
@@ -481,14 +481,14 @@
                                         <span class="status-dot status-blocked" title="Blocked"></span>
                                     {% endif %}
                                 </div>
-                                <p>{{ worker.agent_id }} • {{ worker.department }}</p>
+                                <p><strong>{{ worker.agent_id }}</strong> • {{ worker.department }}</p>
                                 <small>
-                                    Warnings: {{ worker.warning_count }} •
-                                    Status: <span class="status-text-{{ worker.status }}">{{ worker.status|capitalize }}</span> •
-                                    Role: {{ worker.role|capitalize }}
+                                    Warnings: {{ worker.warning_count }} • 
+                                    Role: <span class="tag">{{ worker.role|capitalize }}</span>
                                 </small>
                             </div>
-                            <div class="button-row">
+                            
+                            <div class="worker-actions">
                                 <form method="post" action="{{ url_for('admin_warn_worker', agent_id=worker.agent_id) }}">
                                     <button class="button button-secondary" type="submit">Warn</button>
                                 </form>
@@ -497,11 +497,18 @@
                                         <button class="button button-secondary" type="submit">Unblock</button>
                                     </form>
                                 {% endif %}
-                                <form method="post" action="{{ url_for('admin_worker_role', agent_id=worker.agent_id) }}">
-                                    <input type="hidden" name="role" value="{{ 'worker' if worker.role == 'supervisor' else 'supervisor' }}">
-                                    <button class="button button-secondary" type="submit">
-                                        {{ 'Demote' if worker.role == 'supervisor' else 'Promote' }}
-                                    </button>
+                                
+                                <form method="post" action="{{ url_for('admin_worker_role', agent_id=worker.agent_id) }}" class="worker-update-form">
+                                    <select name="department" required>
+                                        {% for dept in departments %}
+                                            <option value="{{ dept }}" {% if dept == worker.department %}selected{% endif %}>{{ dept }}</option>
+                                        {% endfor %}
+                                    </select>
+                                    <select name="role" required>
+                                        <option value="worker" {% if worker.role == 'worker' %}selected{% endif %}>Worker</option>
+                                        <option value="supervisor" {% if worker.role == 'supervisor' %}selected{% endif %}>Supervisor</option>
+                                    </select>
+                                    <button class="button button-primary" type="submit">Update</button>
                                 </form>
                             </div>
                         </div>

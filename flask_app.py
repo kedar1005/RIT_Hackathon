@@ -1017,6 +1017,7 @@ def admin_unblock_worker(agent_id):
 
 
 @app.route("/admin/workers/<agent_id>/role", methods=["POST"])
+@app.route("/admin/worker/update/<agent_id>", methods=["POST"])
 @login_required(role="agent")
 def admin_worker_role(agent_id):
     if not g.is_admin:
@@ -1024,17 +1025,22 @@ def admin_worker_role(agent_id):
         return redirect(url_for("home"))
         
     new_role = request.form.get("role", "worker")
+    new_dept = request.form.get("department")
+    
     try:
         conn = get_connection()
         cursor = conn.cursor()
-        cursor.execute("UPDATE agents SET role = ? WHERE agent_id = ?", (new_role, agent_id))
+        if new_dept:
+            cursor.execute("UPDATE agents SET role = ?, department = ? WHERE agent_id = ?", (new_role, new_dept, agent_id))
+        else:
+            cursor.execute("UPDATE agents SET role = ? WHERE agent_id = ?", (new_role, agent_id))
         conn.commit()
         conn.close()
-        flash(f"Worker {agent_id} role updated to {new_role}.", "success")
-    except Exception:
-        flash(f"Failed to update worker {agent_id} role.", "error")
+        flash(f"Worker {agent_id} updated successfully.", "success")
+    except Exception as e:
+        flash(f"Failed to update worker {agent_id}: {str(e)}", "error")
         
-    return redirect(url_for("admin_dashboard"))
+    return redirect(url_for("admin_dashboard", tab="admin-workforce"))
 
 
 @app.route("/admin/export")
@@ -1177,8 +1183,74 @@ def supervisor_dashboard():
         total_pages=total_pages,
         total_count=total_complaints,
         dept_workers=get_workers_by_department(selected_dept) if selected_dept else [],
+        all_system_workers=get_all_workers(),
         is_admin_view=g.is_admin
     )
+
+
+@app.route("/supervisor/worker/claim", methods=["POST"])
+@login_required(role="supervisor")
+def supervisor_claim_worker():
+    worker_id = request.form.get("worker_id")
+    department = g.current_user.get("department")
+    
+    if not worker_id:
+        flash("Worker ID is required.", "error")
+        return redirect(url_for("supervisor_dashboard", tab="supervisor-team"))
+        
+    try:
+        conn = get_connection()
+        cursor = conn.cursor()
+        cursor.execute("UPDATE agents SET department = ? WHERE agent_id = ?", (department, worker_id))
+        conn.commit()
+        conn.close()
+        flash(f"Worker {worker_id} successfully claimed for {department}.", "success")
+    except Exception as e:
+        flash(f"Failed to claim worker: {str(e)}", "error")
+        
+    return redirect(url_for("supervisor_dashboard", tab="supervisor-team"))
+
+
+@app.route("/supervisor/worker/add", methods=["POST"])
+@login_required(role="supervisor")
+def supervisor_add_worker():
+    name = request.form.get("name", "").strip()
+    agent_id = request.form.get("agent_id", "").strip().upper()
+    password = request.form.get("password", "").strip()
+    department = g.current_user.get("department")
+    
+    if not all([name, agent_id, password]):
+        flash("Please complete all worker fields.", "error")
+    elif not _validate_agent_id(agent_id):
+        flash("Agent ID must be in the format AGT0002.", "error")
+    else:
+        created = add_agent(name, agent_id, _hash_password(password), department)
+        flash("Worker created successfully." if created else "Worker could not be created.", "success" if created else "error")
+        
+    return redirect(url_for("supervisor_dashboard", tab="supervisor-team"))
+
+
+@app.route("/supervisor/team/assign", methods=["POST"])
+@login_required(role="supervisor")
+def supervisor_assign_lead():
+    worker_id = request.form.get("worker_id")
+    lead_id = request.form.get("lead_id")
+    
+    if not worker_id:
+        flash("Worker ID is required.", "error")
+        return redirect(url_for("supervisor_dashboard"))
+        
+    try:
+        conn = get_connection()
+        cursor = conn.cursor()
+        cursor.execute("UPDATE agents SET lead_id = ? WHERE agent_id = ?", (lead_id or None, worker_id))
+        conn.commit()
+        conn.close()
+        flash(f"Worker {worker_id} assignment updated.", "success")
+    except Exception as e:
+        flash(f"Failed to assign lead: {str(e)}", "error")
+        
+    return redirect(url_for("supervisor_dashboard", tab="supervisor-team"))
 
 
 @app.route("/supervisor/complaints/<int:complaint_id>/assign", methods=["POST"])
