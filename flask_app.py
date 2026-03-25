@@ -459,7 +459,14 @@ def inject_template_context():
 
 @app.route("/")
 def home():
-    return render_template("index.html", stats=get_complaint_stats())
+    stats = get_complaint_stats()
+    homepage_totals = {
+        "registered_complaints": stats.get("total", 0),
+        "resolved_complaints": stats.get("resolved", 0),
+        "total_employees": len(get_all_workers()),
+        "total_departments": len(DEPARTMENTS),
+    }
+    return render_template("index.html", totals=homepage_totals)
 
 
 @app.route("/media/<path:filename>")
