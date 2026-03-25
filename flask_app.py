@@ -312,6 +312,93 @@ def _build_filtered_leaderboard(complaints):
     ]
 
 
+def _build_department_performance(complaints, workers):
+    worker_count_by_department = Counter()
+    for worker in workers:
+        department = (worker.get("department") or "").strip()
+        if not department:
+            continue
+        if worker.get("status") == "blocked":
+            continue
+        worker_count_by_department[department] += 1
+
+    grouped = {department: [] for department in DEPARTMENTS}
+    for complaint in complaints:
+        department = complaint.get("department") or "Public Safety & General"
+        grouped.setdefault(department, []).append(complaint)
+
+    rows = []
+    for department in DEPARTMENTS:
+        dept_complaints = grouped.get(department, [])
+        total = len(dept_complaints)
+        resolved = sum(1 for item in dept_complaints if item.get("status") == "Resolved")
+        pending = sum(1 for item in dept_complaints if item.get("status") == "Pending")
+        in_progress = sum(1 for item in dept_complaints if item.get("status") == "In Progress")
+
+        hours = []
+        for item in dept_complaints:
+            created_at = item.get("created_at")
+            resolved_at = item.get("resolved_at")
+            if not created_at or not resolved_at:
+                continue
+            try:
+                start = datetime.fromisoformat(str(created_at))
+                end = datetime.fromisoformat(str(resolved_at))
+                hours.append(max((end - start).total_seconds() / 3600, 0))
+            except Exception:
+                continue
+
+        avg_hours = (sum(hours) / len(hours)) if hours else 0
+        resolution_rate = ((resolved / total) * 100) if total else 0
+
+        rows.append(
+            {
+                "department": department,
+                "total": total,
+                "resolved": resolved,
+                "pending": pending,
+                "in_progress": in_progress,
+                "avg_hours": round(avg_hours, 1),
+                "staff": worker_count_by_department.get(department, 0),
+                "resolution_rate": round(resolution_rate, 1),
+            }
+        )
+
+    return rows
+
+
+def _build_hod_roster(department_rows, workers):
+    supervisors = {}
+    fallback_by_department = {}
+
+    for worker in workers:
+        department = (worker.get("department") or "").strip()
+        if not department:
+            continue
+        if department not in fallback_by_department:
+            fallback_by_department[department] = worker
+        if worker.get("role") == "supervisor":
+            supervisors[department] = worker
+
+    roster = []
+    for row in department_rows:
+        if row.get("total", 0) == 0 and row.get("staff", 0) == 0:
+            continue
+        department = row["department"]
+        lead = supervisors.get(department) or fallback_by_department.get(department)
+        roster.append(
+            {
+                "department": department,
+                "name": lead.get("name") if lead else "Unassigned",
+                "staff": row.get("staff", 0),
+                "cases": row.get("total", 0),
+                "resolution_rate": row.get("resolution_rate", 0),
+            }
+        )
+
+    return roster
+
+
 def login_required(role=None):
     def decorator(view_func):
         @wraps(view_func)
@@ -710,6 +797,9 @@ def admin_dashboard():
     analytics_stats = _build_filtered_stats(analytics_complaints)
     daily_trend = _build_filtered_daily_trend(analytics_complaints)
     leaderboard = _build_filtered_leaderboard(analytics_complaints)
+    analytics_workers = get_all_workers()
+    analytics_department_rows = _build_department_performance(analytics_complaints, analytics_workers)
+    analytics_hod_roster = _build_hod_roster(analytics_department_rows, analytics_workers)
     avg_resolution_hours = analytics_stats.get("avg_resolution_hours", 0)
     avg_resolution_display = f"{avg_resolution_hours/24:.1f}d" if avg_resolution_hours > 24 else f"{avg_resolution_hours:.0f}h"
     analytics_departments = sorted({complaint.get("department") for complaint in all_complaints if complaint.get("department")})
@@ -758,6 +848,11 @@ def admin_dashboard():
         analytics_daily_chart=_figure_html(get_daily_trend_chart(daily_trend)) if daily_trend else None,
         analytics_leaderboard_chart=_figure_html(get_agent_leaderboard_chart(leaderboard)) if leaderboard else None,
         analytics_avg_resolution=avg_resolution_display,
+        analytics_department_rows=analytics_department_rows,
+        analytics_hod_roster=analytics_hod_roster,
+        analytics_total_resolved=sum(1 for complaint in analytics_complaints if complaint.get("status") == "Resolved"),
+        analytics_total_pending=sum(1 for complaint in analytics_complaints if complaint.get("status") == "Pending"),
+        analytics_total_in_progress=sum(1 for complaint in analytics_complaints if complaint.get("status") == "In Progress"),
     )
 
 

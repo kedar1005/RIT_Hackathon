@@ -186,8 +186,8 @@
     </section>
 
     <section class="tab-pane" data-tab-panel="admin-analytics">
-        <div class="dashboard-grid dashboard-grid-fluid">
-            <article class="panel panel-nested">
+        <div class="analytics-shell">
+            <article class="analytics-block analytics-filter-block">
                 <p class="eyebrow">Analytics Filters</p>
                 <h2>Slice charts by date, department, and priority</h2>
                 <form method="get" class="filter-grid filter-grid-analytics">
@@ -217,45 +217,120 @@
                 <div class="summary-chip">Matching complaints: {{ analytics_filtered_count }}</div>
             </article>
 
-            <article class="panel panel-nested">
-                <p class="eyebrow">Performance Analytics</p>
-                <h2>Complaints by category</h2>
-                {% if analytics_category_chart %}
-                    <div class="chart-shell">{{ analytics_category_chart|safe }}</div>
-                {% else %}
-                    <p class="muted">No complaint data yet.</p>
-                {% endif %}
+            <article class="analytics-block analytics-table-block">
+                <p class="eyebrow">Department Performance</p>
+                <div class="analytics-table-wrap">
+                    <table class="analytics-table">
+                        <thead>
+                            <tr>
+                                <th>Department</th>
+                                <th>Total</th>
+                                <th>Resolved</th>
+                                <th>Pending</th>
+                                <th>In Progress</th>
+                                <th>Avg Time</th>
+                                <th>Staff</th>
+                                <th>Resolution Rate</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for row in analytics_department_rows %}
+                                <tr>
+                                    <td>{{ row.department }}</td>
+                                    <td>{{ row.total }}</td>
+                                    <td class="metric-success">{{ row.resolved }}</td>
+                                    <td class="metric-warn">{{ row.pending }}</td>
+                                    <td class="metric-info">{{ row.in_progress }}</td>
+                                    <td>{{ row.avg_hours|round(0)|int }}h</td>
+                                    <td>{{ row.staff }}</td>
+                                    <td>
+                                        <div class="resolution-cell">
+                                            <div class="resolution-bar-track">
+                                                <span class="resolution-bar-fill" style="width: {{ row.resolution_rate|round(1) }}%"></span>
+                                            </div>
+                                            <strong>{{ row.resolution_rate|round(0)|int }}%</strong>
+                                        </div>
+                                    </td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
             </article>
 
-            <article class="panel panel-nested">
-                <p class="eyebrow">Performance Analytics</p>
-                <h2>Urgency distribution</h2>
-                {% if analytics_urgency_chart %}
-                    <div class="chart-shell">{{ analytics_urgency_chart|safe }}</div>
-                {% else %}
-                    <p class="muted">Not enough data for urgency chart.</p>
-                {% endif %}
+            <article class="analytics-block analytics-hod-block">
+                <p class="eyebrow">HOD Roster</p>
+                <div class="analytics-hod-grid">
+                    {% for hod in analytics_hod_roster[:3] %}
+                        <div class="hod-card">
+                            <span>HOD</span>
+                            <strong>{{ hod.name }}</strong>
+                            <small>{{ hod.department }}</small>
+                            <p>{{ hod.resolution_rate|round(0)|int }}% resolved</p>
+                            <small>{{ hod.staff }} employees · {{ hod.cases }} cases</small>
+                        </div>
+                    {% else %}
+                        <p class="muted">No department leads found yet.</p>
+                    {% endfor %}
+                </div>
             </article>
 
-            <article class="panel panel-nested">
-                <p class="eyebrow">Analytics</p>
-                <h2>Daily trend</h2>
-                {% if analytics_daily_chart %}
-                    <div class="chart-shell">{{ analytics_daily_chart|safe }}</div>
-                {% else %}
-                    <p class="muted">No daily trend data yet.</p>
-                {% endif %}
-            </article>
+            <div class="analytics-kpi-grid">
+                <article class="analytics-kpi-card kpi-total">
+                    <span>Total Complaints</span>
+                    <strong>{{ analytics_filtered_count }}</strong>
+                </article>
+                <article class="analytics-kpi-card kpi-resolved">
+                    <span>Resolved</span>
+                    <strong>{{ analytics_total_resolved }}</strong>
+                </article>
+                <article class="analytics-kpi-card kpi-pending">
+                    <span>Pending</span>
+                    <strong>{{ analytics_total_pending }}</strong>
+                </article>
+                <article class="analytics-kpi-card kpi-avg">
+                    <span>Avg Resolution</span>
+                    <strong>{{ analytics_avg_resolution }}</strong>
+                </article>
+            </div>
 
-            <article class="panel panel-nested">
-                <p class="eyebrow">Analytics</p>
-                <h2>Agent performance</h2>
-                {% if analytics_leaderboard_chart %}
-                    <div class="chart-shell">{{ analytics_leaderboard_chart|safe }}</div>
-                {% else %}
-                    <p class="muted">No agent data yet.</p>
-                {% endif %}
-            </article>
+            <div class="analytics-chart-grid">
+                <article class="analytics-block analytics-chart-card">
+                    <p class="eyebrow">Complaints by Category</p>
+                    {% if analytics_category_chart %}
+                        <div class="chart-shell">{{ analytics_category_chart|safe }}</div>
+                    {% else %}
+                        <p class="muted">No complaint data yet.</p>
+                    {% endif %}
+                </article>
+
+                <article class="analytics-block analytics-chart-card">
+                    <p class="eyebrow">Urgency Distribution</p>
+                    {% if analytics_urgency_chart %}
+                        <div class="chart-shell">{{ analytics_urgency_chart|safe }}</div>
+                    {% else %}
+                        <p class="muted">Not enough data for urgency chart.</p>
+                    {% endif %}
+                </article>
+
+                <article class="analytics-block analytics-chart-card">
+                    <p class="eyebrow">Daily Trend (30 days)</p>
+                    {% if analytics_daily_chart %}
+                        <div class="chart-shell">{{ analytics_daily_chart|safe }}</div>
+                    {% else %}
+                        <p class="muted">No daily trend data yet.</p>
+                    {% endif %}
+                </article>
+
+                <article class="analytics-block analytics-chart-card">
+                    <p class="eyebrow">Agent Leaderboard</p>
+                    {% if analytics_leaderboard_chart %}
+                        <div class="chart-shell">{{ analytics_leaderboard_chart|safe }}</div>
+                    {% else %}
+                        <p class="muted">No agent data yet.</p>
+                    {% endif %}
+                </article>
+            </div>
         </div>
     </section>
 
